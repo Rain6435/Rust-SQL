@@ -38,7 +38,7 @@ rusqlite = { version = "0.32", features = ["column_decltype"] }
 tokio-postgres = "0.7"
 ratatui = "0.29"
 crossterm = "0.28"
-axum = { version = "0.7", features = ["ws", "macros"] }
+axum = { version = "0.8", features = ["ws", "macros"] }
 eframe = { version = "0.30", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
 egui = "0.30"
 egui_extras = { version = "0.30", features = ["default"] }
