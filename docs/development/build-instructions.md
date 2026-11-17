@@ -1,5 +1,9 @@
-# Build
+# Build Instructions
 
-1. `npm install`
-1. `npm run dist`
-1. The installer will be placed at `dist` folder.
+## Building Release Binaries
+
+```bash
+cargo build --release --locked
+```
+
+The compiled executable will be located at `target/release/Rust-SQL` (or `target\release\Rust-SQL.exe` on Windows).

@@ -1,24 +1,7 @@
-# Testing changes of sqlectron-db-core
+# Testing Core Engine & Adapter Changes
 
-This is an easy way to test sqlectron-db-core changes on the GUI project.
-
-1. Make the GUI project use the core from `../sqlectron-db-core` directory:
+All core engine and database adapter tests live in `src/` unit tests and `tests/integration_suite.rs`.
 
 ```bash
-# from sqlectron-gui directory
-./scripts/link-sqlectron-db-core.sh
-```
-
-1. Start the auto compile of sqlectron-db-core:
-
-```bash
-# from sqlectron-db-core directory
-npm run watch
-```
-
-1. Then run the GUI project normally:
-
-```shell
-# from sqlectron-gui directory
-npm run dev
+cargo test
 ```

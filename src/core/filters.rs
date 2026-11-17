@@ -1,6 +1,6 @@
 use crate::common::types::{DatabaseFilter, FilterClause, SchemaFilter};
 
-/// Build SQL filter clause for schema (`sqlectron-db-core/src/filters.ts`)
+/// Build SQL filter clause for schema
 pub fn build_schema_filter(
     filter: Option<&SchemaFilter>,
     schema_field: Option<&str>,
@@ -11,7 +11,7 @@ pub fn build_schema_filter(
     Some(build_clause(clause, field))
 }
 
-/// Build SQL filter clause for database (`sqlectron-db-core/src/filters.ts`)
+/// Build SQL filter clause for database
 pub fn build_database_filter(
     filter: Option<&DatabaseFilter>,
     database_field: &str,
@@ -51,7 +51,7 @@ fn build_clause(clause: &FilterClause, field: &str) -> String {
     }
 }
 
-/// In-memory database filter used by MySQL adapter (`filterDatabase` in `sqlectron-db-core/src/adapters/mysql.ts`)
+/// In-memory database filter used by MySQL adapter
 pub fn filter_database_name(name: &str, filter: Option<&DatabaseFilter>) -> bool {
     let Some(filter) = filter else {
         return true;
@@ -143,11 +143,11 @@ mod tests {
     fn test_filter_database_name() {
         let f = DatabaseFilter {
             database: Some(FilterClause::List(FilterList {
-                only: Some(vec!["sqlectron".to_string()]),
+                only: Some(vec!["rust_sql".to_string()]),
                 ignore: Some(vec!["mysql".to_string()]),
             })),
         };
-        assert!(filter_database_name("sqlectron", Some(&f)));
+        assert!(filter_database_name("rust_sql", Some(&f)));
         assert!(!filter_database_name("mysql", Some(&f)));
         assert!(!filter_database_name("other", Some(&f)));
     }

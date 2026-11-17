@@ -16,12 +16,12 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
 
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("Rust-SQL (Sqlectron) v{}", env!("CARGO_PKG_VERSION"));
-        println!("A simple and lightweight SQL client with cross database and platform support.\n");
+        println!("Rust-SQL v{}", env!("CARGO_PKG_VERSION"));
+        println!("A fast, lightweight SQL client with cross database and platform support.\n");
         println!("Usage: Rust-SQL [OPTIONS]\n");
         println!("Options:");
         println!("  --gui                    Launch native Desktop GUI (default when DISPLAY/WAYLAND is set)");
-        println!("  --tui, --term            Launch Terminal UI (sqlectron-term mode)");
+        println!("  --tui, --term            Launch Terminal UI");
         println!("  --web                    Launch Web UI & IPC Server");
         println!("  --port <PORT>            Port for Web UI server (default: 8080)");
         println!("  -e, --exec <SQL>         Execute SQL query in headless batch mode and exit");

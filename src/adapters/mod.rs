@@ -135,7 +135,7 @@ pub fn register_adapter(adapter: AdapterInfo) -> Result<(), DbCoreError> {
     Ok(())
 }
 
-/// Identifier wrapping per adapter matching `sqlectron-db-core/src/adapters/*.ts`
+/// Identifier wrapping per database adapter
 pub fn wrap_identifier_for_adapter(adapter_key: &str, value: &str) -> String {
     if value == "*" {
         return "*".to_string();
@@ -167,7 +167,7 @@ pub fn wrap_identifier_for_adapter(adapter_key: &str, value: &str) -> String {
     }
 }
 
-/// Builds the `SELECT TOP / LIMIT` query per adapter matching `getQuerySelectTop` in `sqlectron-db-core`
+/// Builds the `SELECT TOP / LIMIT` query per database adapter
 pub fn build_query_select_top(
     adapter_key: &str,
     table: &str,

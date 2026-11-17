@@ -113,7 +113,7 @@ pub fn execute_sqlite_statement(
             rows_out.push(map);
         }
 
-        // Match Sqlectron SQLite behavior: fields are present when rows are non-empty, in SQL column order
+        // Populate fields when rows are non-empty, in SQL column order
         let fields = if !rows_out.is_empty() {
             col_names
                 .into_iter()

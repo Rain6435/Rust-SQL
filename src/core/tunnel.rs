@@ -20,7 +20,7 @@ pub struct TunnelConfig {
     pub agent_sock: Option<String>,
 }
 
-/// Validates and builds the SSH tunnel configuration, matching `configTunnel` in `sqlectron-db-core/src/tunnel.ts`.
+/// Validates and builds the SSH tunnel configuration.
 pub fn config_tunnel(server_info: &Server) -> Result<TunnelConfig, String> {
     let dst_host = server_info
         .host
@@ -111,7 +111,7 @@ impl Drop for TunnelHandle {
 }
 
 /// Starts a local TCP listener on `127.0.0.1:0` that forwards connections through SSH
-/// (or direct local bridge when targeting a local test endpoint), matching `sqlectron-db-core/src/tunnel.ts`.
+/// (or direct local bridge when targeting a local test endpoint).
 pub async fn connect_tunnel(server_info: &Server) -> Result<TunnelHandle, String> {
     let cfg = config_tunnel(server_info)?;
     let listener = TcpListener::bind("127.0.0.1:0")

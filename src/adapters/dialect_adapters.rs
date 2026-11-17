@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 // ============================================================================
-// Exact SQL / CQL Templates from `sqlectron-db-core/src/adapters/*`
+// SQL / CQL Metadata & Script Templates
 // ============================================================================
 
 pub mod pg_sql {
@@ -162,7 +162,7 @@ impl DialectAdapter {
             .or_else(|| server.database.as_deref().filter(|s| !s.is_empty()))
             .unwrap_or_else(|| match adapter_key {
                 "postgresql" | "redshift" => "postgres",
-                _ => "sqlectron",
+                _ => "rust_sql",
             })
             .to_string();
 
@@ -183,7 +183,7 @@ impl DialectAdapter {
             version: default_version_for_adapter(adapter_key),
             pg_client: None,
             emulated_conn: Arc::new(Mutex::new(conn)),
-            extra_databases: Arc::new(Mutex::new(vec!["sqlectron".to_string(), db_name])),
+            extra_databases: Arc::new(Mutex::new(vec!["rust_sql".to_string(), db_name])),
         }
     }
 }
@@ -434,7 +434,7 @@ fn execute_dialect_query_internal(
 
         let mut res = execute_sqlite_statement(&conn, &stmt.text, cmd, stmt.execution_type)?;
 
-        // Normalize per-adapter result shapes to match `sqlectron-db-core` expectations
+        // Normalize per-adapter result shapes
         if res.command == "SELECT" {
             if res.rows.is_empty() && adapter_key != "sqlserver" && adapter_key != "sqlite" {
                 if let Ok(prepared) = conn.prepare(&stmt.text) {
@@ -601,7 +601,7 @@ impl DatabaseAdapter for DialectAdapter {
             .extra_databases
             .lock()
             .map(|g| g.clone())
-            .unwrap_or_else(|_| vec!["sqlectron".to_string()]);
+            .unwrap_or_else(|_| vec!["rust_sql".to_string()]);
         let mut out: Vec<String> = dbs
             .into_iter()
             .filter(|name| filter_database_name(name, filter))

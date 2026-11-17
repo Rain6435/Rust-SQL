@@ -1,3 +1,7 @@
-# Docker databases
+# Local Docker Databases
 
-You can test it using your own database or use a [docker-compose](https://github.com/sqlectron/sqlectron-databases) built for us to bring up several different databases.
+You can spin up local PostgreSQL, MySQL, and MariaDB test instances using the included `docker-compose.yml`:
+
+```bash
+docker compose up -d postgres mysql mariadb
+```

@@ -66,8 +66,7 @@ pub fn parse_connection_uri(uri: &str, existing: Option<&Server>) -> Option<Serv
     Some(srv)
 }
 
-/// Builds a connection URI string from a `Server`, masking the password with `*` unless `show_plain_password` is true,
-/// matching `ServerModalForm` in `sqlectron/src/renderer/components/server-modal-form.tsx`.
+/// Builds a connection URI string from a `Server`, masking the password with `*` unless `show_plain_password` is true.
 pub fn build_connection_uri(server: &Server, show_plain_password: bool) -> String {
     let Some(client_info) = CLIENTS.iter().find(|c| c.key == server.client) else {
         return String::new();

@@ -16,7 +16,7 @@ This project and everyone participating in it is governed by our [Code of Conduc
 
 - **`src/common/`**: Shared data types (`Server`, `Config`, `QueryRowResult`, `AdapterInfo`), IPC event constants (`event.rs`), and string/version utilities (`utils.rs`).
 - **`src/core/`**: Core business logic:
-  - `crypto.rs`: AES-256-CBC password encryption/decryption compatible with Sqlectron's `sqlectron.json`.
+  - `crypto.rs`: AES-256-CBC password encryption/decryption for `rust-sql.json`.
   - `config.rs` & `servers.rs` & `validators.rs`: Configuration file lifecycle, server CRUD, and validation.
   - `sql_identifier.rs` & `sql_formatter.rs`: Multi-statement SQL parser/classifier and dialect-aware query formatter.
   - `safety.rs`: Read-only guardrail and destructive query analyzer (`DELETE`/`UPDATE` without `WHERE`, `DROP`, `TRUNCATE`).
@@ -26,10 +26,10 @@ This project and everyone participating in it is governed by our [Code of Conduc
   - `export.rs`: Multi-format result exporter (`CSV`, `JSON`, `JSONL`, `MARKDOWN`, `SQL INSERT`).
   - `tunnel.rs`: SSH local port-forwarding tunnel.
 - **`src/adapters/`**: Database adapters (`sqlite.rs`, `dialect_adapters.rs`, `facade.rs`) supporting PostgreSQL, Redshift, MySQL, MariaDB, Microsoft SQL Server, SQLite, and Apache Cassandra.
-- **`src/state/`**: Redux-equivalent state machine (`AppStore`) managing all 14 application slices.
+- **`src/state/`**: State machine (`AppStore`) managing all 14 application slices.
 - **`src/gui/`**: Native Desktop GUI (`eframe` / `egui`).
-- **`src/tui/`**: Terminal UI (`ratatui` + `crossterm`, `sqlectron-term` clone).
-- **`src/web/`**: Web UI and Electron-compatible IPC server (`axum`).
+- **`src/tui/`**: Terminal UI (`ratatui` + `crossterm`).
+- **`src/web/`**: Web UI and IPC server (`axum`).
 
 ---
 
@@ -65,7 +65,7 @@ This project and everyone participating in it is governed by our [Code of Conduc
    # Native Desktop GUI
    cargo run -- --gui
 
-   # Terminal UI (sqlectron-term)
+   # Terminal UI
    cargo run -- --tui
 
    # Web UI & IPC Server
@@ -87,6 +87,6 @@ This project and everyone participating in it is governed by our [Code of Conduc
 ## Submitting a Pull Request
 
 1. Create a descriptive feature branch (`git checkout -b feat/my-feature` or `fix/issue-description`).
-2. Write unit or integration tests in `src/` or `tests/sqlectron_suite.rs` covering your changes.
+2. Write unit or integration tests in `src/` or `tests/integration_suite.rs` covering your changes.
 3. Update `CHANGELOG.md` under the `[Unreleased]` section if the change is user-facing.
 4. Open a Pull Request and complete the PR checklist.

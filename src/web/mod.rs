@@ -525,7 +525,7 @@ pub async fn dispatch_ipc_event(state: &WebIpcState, req: IpcRequest) -> IpcResp
                 .unwrap_or_default();
             let export_type = str_arg(1).unwrap_or_else(|| "CSV".to_string());
             let delimiter = str_arg(2);
-            let filename = str_arg(3).unwrap_or_else(|| "/tmp/sqlectron_export".to_string());
+            let filename = str_arg(3).unwrap_or_else(|| "/tmp/rust_sql_export".to_string());
             let db = state.db.lock().await;
             match db.export_query_result_to_file(
                 &rows,
@@ -578,7 +578,7 @@ async fn handle_ipc(
 }
 
 async fn handle_index() -> Html<&'static str> {
-    Html(SQLECTRON_WEB_HTML)
+    Html(RUST_SQL_WEB_HTML)
 }
 
 async fn handle_health() -> Json<Value> {
@@ -608,11 +608,11 @@ pub async fn run_web_server(port: u16) -> Result<(), String> {
     axum::serve(listener, app).await.map_err(|e| e.to_string())
 }
 
-pub const SQLECTRON_WEB_HTML: &str = r#"<!DOCTYPE html>
+pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Sqlectron (Rust-SQL)</title>
+  <title>Rust-SQL</title>
   <style>
     * { box-sizing: border-box; font-family: 'Lato', 'Helvetica Neue', Arial, sans-serif; }
     body { margin: 0; background: #f8fafc; color: #0f172a; display: flex; flex-direction: column; height: 100vh; }
@@ -635,7 +635,7 @@ pub const SQLECTRON_WEB_HTML: &str = r#"<!DOCTYPE html>
 </head>
 <body>
   <header>
-    <div><strong>Rust-SQL</strong> (Sqlectron)</div>
+    <div><strong>Rust-SQL</strong></div>
     <div id="breadcrumb">servers</div>
     <div id="conn-actions"></div>
   </header>
@@ -658,7 +658,7 @@ pub const SQLECTRON_WEB_HTML: &str = r#"<!DOCTYPE html>
       return json.data;
     }
 
-    window.sqlectron = { ipc };
+    window.rustSql = { ipc };
 
     async function loadServers() {
       const cfg = await ipc('CONFIG_GET_FULL', true);

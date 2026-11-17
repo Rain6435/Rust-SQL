@@ -645,14 +645,14 @@ impl RustSqlGuiApp {
                 }
                 ui.hyperlink_to(
                     "Report Issue",
-                    "https://github.com/sqlectron/sqlectron-gui/issues",
+                    "https://github.com/Rain6435/Rust-SQL/issues",
                 );
-                ui.hyperlink_to("About Sqlectron", "https://sqlectron.github.io");
+                ui.hyperlink_to("About Rust-SQL", "https://github.com/Rain6435/Rust-SQL");
             });
         });
 
         ui.horizontal(|ui| {
-            ui.heading(RichText::new("⚡ Rust-SQL (Sqlectron)").strong());
+            ui.heading(RichText::new("⚡ Rust-SQL").strong());
             ui.separator();
 
             let current_route = self.route.clone();
@@ -703,7 +703,7 @@ impl RustSqlGuiApp {
                 if ui.small_button("⌨ Shortcuts").clicked() {
                     self.show_shortcuts_modal = true;
                 }
-                ui.hyperlink_to("GitHub", "https://github.com/sqlectron/sqlectron");
+                ui.hyperlink_to("GitHub", "https://github.com/Rain6435/Rust-SQL");
                 if let Some(ref cfg) = self.store.config.data {
                     if cfg.log.console || cfg.log.file {
                         ui.label(
@@ -2478,13 +2478,13 @@ impl eframe::App for RustSqlGuiApp {
 
         self.handle_global_shortcuts(ctx);
 
-        egui::TopBottomPanel::top("sqlectron_header")
+        egui::TopBottomPanel::top("rust_sql_header")
             .exact_height(56.0)
             .show(ctx, |ui| {
                 self.render_header(ui);
             });
 
-        egui::TopBottomPanel::bottom("sqlectron_footer")
+        egui::TopBottomPanel::bottom("rust_sql_footer")
             .exact_height(28.0)
             .show(ctx, |ui| {
                 self.render_footer(ui);
@@ -2516,7 +2516,7 @@ pub fn run_native_gui() -> Result<(), String> {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("Rust-SQL (Sqlectron)")
+            .with_title("Rust-SQL")
             .with_inner_size([1200.0, 800.0])
             .with_min_inner_size([800.0, 550.0]),
         ..Default::default()

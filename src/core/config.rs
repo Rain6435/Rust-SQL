@@ -41,11 +41,11 @@ pub fn resolve_home_path_to_absolute(filename: &str) -> String {
     filename.to_string()
 }
 
-/// Resolves the Sqlectron config file path (`getConfigPath` in `src/browser/core/utils/index.ts`):
+/// Resolves the Rust-SQL config file path:
 /// 1. Override path (for tests)
-/// 2. `$SQLECTRON_HOME/sqlectron.json`
-/// 3. `~/.sqlectron.json` (if it already exists)
-/// 4. `~/.config/Sqlectron/sqlectron.json` (or OS-specific config dir)
+/// 2. `$RUST_SQL_HOME/rust-sql.json`
+/// 3. `~/.rust-sql.json` (if it already exists)
+/// 4. `~/.config/Rust-SQL/rust-sql.json` (or OS-specific config dir)
 pub fn get_config_path() -> PathBuf {
     if let Ok(guard) = override_path_store().lock() {
         if let Some(ref p) = *guard {
@@ -53,24 +53,24 @@ pub fn get_config_path() -> PathBuf {
         }
     }
 
-    if let Ok(sqlectron_home) = std::env::var("SQLECTRON_HOME") {
-        if !sqlectron_home.is_empty() {
-            return Path::new(&sqlectron_home).join("sqlectron.json");
+    if let Ok(rust_sql_home) = std::env::var("RUST_SQL_HOME") {
+        if !rust_sql_home.is_empty() {
+            return Path::new(&rust_sql_home).join("rust-sql.json");
         }
     }
 
     if let Some(home) = dirs::home_dir() {
-        let legacy = home.join(".sqlectron.json");
+        let legacy = home.join(".rust-sql.json");
         if legacy.is_file() {
             return legacy;
         }
     }
 
     if let Some(cfg_dir) = dirs::config_dir() {
-        return cfg_dir.join("Sqlectron").join("sqlectron.json");
+        return cfg_dir.join("Rust-SQL").join("rust-sql.json");
     }
 
-    PathBuf::from("sqlectron.json")
+    PathBuf::from("rust-sql.json")
 }
 
 pub fn sanitize_server(server: &Server, crypto_secret: &str) -> Result<Server, String> {
@@ -306,13 +306,13 @@ pub fn get_full_sync(force_clean_cache: bool) -> Result<Config, String> {
             .base
             .custom_font
             .unwrap_or_else(|| "Lato".to_string()),
-        name: "sqlectron".to_string(),
+        name: "Rust-SQL".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         path: Some(config_path),
-        homepage: Some("https://sqlectron.github.io".to_string()),
-        bugs: Some("https://github.com/sqlectron/sqlectron-gui/issues".to_string()),
+        homepage: Some("https://github.com/Rain6435/Rust-SQL".to_string()),
+        bugs: Some("https://github.com/Rain6435/Rust-SQL/issues".to_string()),
         repository: Some(RepositoryInfo {
-            url: "https://github.com/sqlectron/sqlectron-gui".to_string(),
+            url: "https://github.com/Rain6435/Rust-SQL".to_string(),
         }),
         dev_mode: Some(dev_mode),
         print_version: Some(print_version),

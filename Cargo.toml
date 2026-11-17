@@ -2,10 +2,9 @@
 name = "Rust-SQL"
 version = "1.39.0"
 edition = "2021"
-authors = ["The Sqlectron Team <maxcnunes@gmail.com>", "Rust-SQL Contributors"]
-description = "A simple and lightweight SQL client with cross database and platform support (Rust clone of Sqlectron)"
+authors = ["Mohammed Elhasnaoui <77762120+Rain6435@users.noreply.github.com>"]
+description = "A fast, lightweight, cross-database, and cross-platform SQL client written in Rust"
 license = "MIT"
-homepage = "https://github.com/Rain6435/Rust-SQL"
 repository = "https://github.com/Rain6435/Rust-SQL"
 default-run = "Rust-SQL"
 

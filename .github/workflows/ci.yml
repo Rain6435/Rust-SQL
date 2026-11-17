@@ -118,7 +118,7 @@ jobs:
         run: |
           cargo run -- --version
           cargo run -- --help
-          cargo run -- --uri "postgres://localhost:5432/sqlectron" --erd
+          cargo run -- --uri "postgres://localhost:5432/rust_sql" --erd
           cargo run -- -e "CREATE TABLE ci_test (id INT, label TEXT); INSERT INTO ci_test VALUES (1, 'ok'); SELECT * FROM ci_test;" --format markdown
 
   docs:

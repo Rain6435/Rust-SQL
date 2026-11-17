@@ -220,7 +220,7 @@ fn default_log_level() -> String {
 }
 
 fn default_log_path() -> String {
-    "~/.sqlectron.log".to_string()
+    "~/.rust-sql.log".to_string()
 }
 
 impl Default for LogOptions {
@@ -329,10 +329,10 @@ impl Default for Config {
             name: "Rust-SQL".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             path: None,
-            homepage: Some("https://sqlectron.github.io".to_string()),
-            bugs: Some("https://github.com/sqlectron/sqlectron-gui/issues".to_string()),
+            homepage: Some("https://github.com/Rain6435/Rust-SQL".to_string()),
+            bugs: Some("https://github.com/Rain6435/Rust-SQL/issues".to_string()),
             repository: Some(RepositoryInfo {
-                url: "https://github.com/sqlectron/sqlectron-gui".to_string(),
+                url: "https://github.com/Rain6435/Rust-SQL".to_string(),
             }),
             dev_mode: Some(false),
             print_version: Some(false),

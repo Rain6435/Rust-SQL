@@ -11,8 +11,8 @@ pub struct CanceledByUserError {
     pub name: String,
     pub message: String,
     pub code: String,
-    #[serde(rename = "sqlectronError")]
-    pub sqlectron_error: String,
+    #[serde(rename = "errorCode")]
+    pub error_code: String,
 }
 
 impl Default for CanceledByUserError {
@@ -27,7 +27,7 @@ impl CanceledByUserError {
             name: CANCELED_BY_USER_NAME.to_string(),
             message: CANCELED_BY_USER_MESSAGE.to_string(),
             code: CANCELED_BY_USER_CODE.to_string(),
-            sqlectron_error: CANCELED_BY_USER_CODE.to_string(),
+            error_code: CANCELED_BY_USER_CODE.to_string(),
         }
     }
 }
@@ -59,7 +59,7 @@ pub enum DbCoreError {
 }
 
 impl DbCoreError {
-    pub fn sqlectron_error_code(&self) -> Option<&str> {
+    pub fn error_code(&self) -> Option<&str> {
         match self {
             DbCoreError::CanceledByUser(_) => Some(CANCELED_BY_USER_CODE),
             _ => None,

@@ -44,7 +44,7 @@ pub fn get_select_limit() -> u32 {
         .unwrap_or(DEFAULT_LIMIT)
 }
 
-/// Represents a single database connection (`Database` in `sqlectron-db-core/src/database.ts`).
+/// Represents a single database connection.
 pub struct DatabaseConnection {
     pub server_config: Server,
     pub adapter_key: String,
@@ -271,8 +271,7 @@ impl DatabaseConnection {
             .await
     }
 
-    /// Matches `Database.getTableSelectScript` in `sqlectron-db-core/src/database.ts`:
-    /// `SELECT <col1>, <col2> FROM [schema.]<table>;`
+    /// Generates `SELECT <col1>, <col2> FROM [schema.]<table>;`
     pub async fn get_table_select_script(
         &self,
         table: &str,
@@ -293,8 +292,7 @@ impl DatabaseConnection {
         ))
     }
 
-    /// Matches `Database.getTableInsertScript` in `sqlectron-db-core/src/database.ts`:
-    /// `INSERT INTO [schema.]<table> (<col1>, <col2>)\n VALUES (?, ?);`
+    /// Generates `INSERT INTO [schema.]<table> (<col1>, <col2>)\n VALUES (?, ?);`
     pub async fn get_table_insert_script(
         &self,
         table: &str,
@@ -317,8 +315,7 @@ impl DatabaseConnection {
         ))
     }
 
-    /// Matches `Database.getTableUpdateScript` in `sqlectron-db-core/src/database.ts`:
-    /// `UPDATE [schema.]<table>\n SET <col1>=?, <col2>=?\n WHERE <condition>;`
+    /// Generates `UPDATE [schema.]<table>\n SET <col1>=?, <col2>=?\n WHERE <condition>;`
     pub async fn get_table_update_script(
         &self,
         table: &str,
@@ -339,8 +336,7 @@ impl DatabaseConnection {
         ))
     }
 
-    /// Matches `Database.getTableDeleteScript` in `sqlectron-db-core/src/database.ts`:
-    /// `DELETE FROM [schema.]<table> WHERE <condition>;`
+    /// Generates `DELETE FROM [schema.]<table> WHERE <condition>;`
     pub async fn get_table_delete_script(
         &self,
         table: &str,
@@ -380,7 +376,7 @@ impl DatabaseConnection {
     }
 }
 
-/// Represents a `Server` session in `sqlectron-db-core/src/server.ts`.
+/// Represents a `Server` session managing multiple database connections.
 pub struct ServerSession {
     pub config: Server,
     pub adapter_key: String,
@@ -458,7 +454,7 @@ impl ServerSession {
     }
 }
 
-/// Complete Rust port of `DatabaseFacade` (`src/browser/core/db.ts`) implementing `SqlectronDB`.
+/// High-level database facade managing active server sessions and cancellable queries.
 #[derive(Default)]
 pub struct DatabaseFacade {
     pub server_session: Option<ServerSession>,

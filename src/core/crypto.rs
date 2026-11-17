@@ -100,7 +100,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_sqlectron_known_vector() {
+    fn test_aes256_cbc_known_vector() {
         let secret = "CHK`Ya91Hs{me!^8ndwPPaPPxwQ}`";
         let encrypted = EncryptedPassword {
             iv_text: "wGf6X9T+QSygOHqtgQPlcA==".to_string(),

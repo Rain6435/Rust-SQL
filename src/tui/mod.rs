@@ -77,9 +77,9 @@ impl TuiApp {
 
         // Top Title / Status bar
         let status_text = if !self.store.status.is_empty() {
-            format!(" Rust-SQL (sqlectron-term) | Status: {}", self.store.status)
+            format!(" Rust-SQL | Status: {}", self.store.status)
         } else {
-            " Rust-SQL (sqlectron-term)".to_string()
+            " Rust-SQL".to_string()
         };
         let top_bar = Paragraph::new(status_text).style(
             Style::default()
@@ -343,7 +343,7 @@ impl TuiApp {
             f.render_widget(Paragraph::new("").block(results_block), r_chunks[1]);
         }
 
-        // Context-sensitive shortcuts bar matching `sqlectron-term/src/containers/database.js`
+        // Context-sensitive shortcuts bar
         let shortcut_text = match self.db_focus {
             DatabaseFocus::TableList => {
                 " [Enter] Select  [c] Change database  [s] List servers  [Tab/C-e] Editor  [q] Quit"

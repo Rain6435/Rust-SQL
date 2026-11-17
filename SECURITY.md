@@ -12,7 +12,7 @@ The following versions of **Rust-SQL** currently receive security updates:
 ## Built-In Security Controls
 
 1. **AES-256-CBC Credential Encryption (`src/core/crypto.rs`)**:
-   - Database and SSH passwords saved in `sqlectron.json` are encrypted at rest using AES-256-CBC with per-password random 16-byte IVs (`EncryptedPassword { ivText, encryptedText }`).
+   - Database and SSH passwords saved in `rust-sql.json` are encrypted at rest using AES-256-CBC with per-password random 16-byte IVs (`EncryptedPassword { ivText, encryptedText }`).
    - Legacy insecure cipher formats (`unsafeDecrypt`) are explicitly rejected.
 2. **Read-Only Guardrail & Destructive Query Analyzer (`src/core/safety.rs`)**:
    - Connections can be locked into **Read-Only Mode** (`--read-only` or `🔒 Read-Only` in GUI), blocking all data-modifying and schema-altering statements (`INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `TRUNCATE`, `CREATE`).

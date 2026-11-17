@@ -55,7 +55,7 @@ async fn test_all_7_adapters_db_spec() {
             database: Some(if adapter_key == "sqlite" {
                 ":memory:".to_string()
             } else {
-                "sqlectron".to_string()
+                "rust_sql".to_string()
             }),
             ssl: Some(SslConfig::Bool(false)),
             ..Default::default()
@@ -104,7 +104,7 @@ async fn test_all_7_adapters_db_spec() {
         if adapter_key == "sqlite" {
             assert_eq!(dbs[0], ":memory:");
         } else {
-            assert!(dbs.contains(&"sqlectron".to_string()));
+            assert!(dbs.contains(&"rust_sql".to_string()));
         }
 
         // 3. listTables
@@ -357,7 +357,7 @@ async fn test_all_7_adapters_db_spec() {
             let q_handle = db_conn.query("SELECT pg_sleep(10);").expect("create query");
             q_handle.cancel().await.expect("cancel query");
             let err = q_handle.execute().await.unwrap_err();
-            assert_eq!(err.sqlectron_error_code(), Some("CANCELED_BY_USER"));
+            assert_eq!(err.error_code(), Some("CANCELED_BY_USER"));
         }
 
         db_conn.truncate_all_tables(None).await.expect("truncate");
@@ -378,7 +378,7 @@ impl ListDatabasesCompat for rust_sql::adapters::DatabaseConnection {
 #[tokio::test]
 async fn test_servers_crud_state_store_ipc_and_tui() {
     let tmp = TempDir::new().expect("tempdir");
-    let cfg_path = tmp.path().join("sqlectron.json");
+    let cfg_path = tmp.path().join("rust-sql.json");
     set_config_path_override(Some(cfg_path.clone()));
 
     let secret = "CHK`Ya91Hs{me!^8ndwPPaPPxwQ}`";

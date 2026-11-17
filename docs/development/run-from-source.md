@@ -1,27 +1,15 @@
-# Run from Source
+# Running from Source
 
-The Sqlectron developer environment requires Node **(10 or higher)** and NPM.
+```bash
+git clone https://github.com/Rain6435/Rust-SQL.git
+cd Rust-SQL
 
-**Cloning this project:**
+# Run Desktop GUI
+cargo run -- --gui
 
-```shell
-git clone git@github.com:sqlectron/sqlectron-gui.git
-cd sqlectron-gui
+# Run Terminal UI
+cargo run -- --tui
+
+# Run Web UI Server
+cargo run -- --web --port 8080
 ```
-
-**Installing the dependencies:**
-
-```shell
-npm install
-```
-
-**Running the application:**
-
-```shell
-npm run dev
-```
-
-Note: Due to timing issues between starting the webpack-dev-server and electron, it
-is probable that on initial start, the electron window will be empty. After waiting
-for webpack to finish building the bundle for the first time, you will need to
-reload the electron window. This can be accomplished using `Shift+Cmd/Ctrl+R`.

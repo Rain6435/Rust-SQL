@@ -1,11 +1,11 @@
-# Rust-SQL (Sqlectron in Rust)
+# Rust-SQL
 
 [![CI](https://github.com/Rain6435/Rust-SQL/actions/workflows/ci.yml/badge.svg)](https://github.com/Rain6435/Rust-SQL/actions/workflows/ci.yml)
 [![Release](https://github.com/Rain6435/Rust-SQL/actions/workflows/release.yml/badge.svg)](https://github.com/Rain6435/Rust-SQL/actions/workflows/release.yml)
 [![Security Audit](https://github.com/Rain6435/Rust-SQL/actions/workflows/security-audit.yml/badge.svg)](https://github.com/Rain6435/Rust-SQL/actions/workflows/security-audit.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A fast, lightweight, cross-database, and cross-platform SQL client written in Rust — a complete clone of [Sqlectron](https://github.com/sqlectron/sqlectron) (`sqlectron-gui`, `sqlectron-db-core`, `sqlectron-core`, and `sqlectron-term`), enhanced with modern developer features.
+A fast, lightweight, cross-database, and cross-platform SQL client written in Rust with native Desktop GUI, Terminal UI, Web UI, and headless CLI batch execution.
 
 ---
 
@@ -21,7 +21,7 @@ A fast, lightweight, cross-database, and cross-platform SQL client written in Ru
 
 ---
 
-## Modern Developer Features
+## Core Features
 
 1. **Read-Only Guardrail & Destructive Query Safety Analyzer ([src/core/safety.rs](src/core/safety.rs))**:
    - **Read-Only Mode (`🔒 Read-Only` / `--read-only`)**: Blocks any `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `DROP`, or `TRUNCATE` statement from running against protected connections.
@@ -46,8 +46,8 @@ A fast, lightweight, cross-database, and cross-platform SQL client written in Ru
 ## Three Built-In User Interfaces
 
 1. **Native Desktop GUI (`--gui`)**: Powered by `eframe` / `egui` ([src/gui/mod.rs](src/gui/mod.rs)).
-2. **Terminal UI (`--tui` / `--term`)**: Powered by `ratatui` + `crossterm` ([src/tui/mod.rs](src/tui/mod.rs)), cloning `sqlectron-term`.
-3. **Web GUI & Electron-Compatible IPC Server (`--web --port 8080`)**: Powered by `axum` ([src/web/mod.rs](src/web/mod.rs)), serving the Sqlectron web UI and implementing all 50+ IPC events from [src/common/event.rs](src/common/event.rs).
+2. **Terminal UI (`--tui` / `--term`)**: Powered by `ratatui` + `crossterm` ([src/tui/mod.rs](src/tui/mod.rs)).
+3. **Web GUI & IPC Server (`--web --port 8080`)**: Powered by `axum` ([src/web/mod.rs](src/web/mod.rs)), serving the Rust-SQL web interface and implementing all IPC events from [src/common/event.rs](src/common/event.rs).
 
 ---
 
@@ -60,17 +60,17 @@ cargo test
 # Launch Native Desktop GUI
 cargo run -- --gui
 
-# Launch Terminal UI (sqlectron-term)
+# Launch Terminal UI
 cargo run -- --tui
 
 # Launch Web UI Server on port 8080
 cargo run -- --web --port 8080
 
 # Execute a headless batch query and format as Markdown
-cargo run -- --uri "postgres://localhost:5432/sqlectron" -e "SELECT * FROM users" --format markdown
+cargo run -- --uri "postgres://localhost:5432/rust_sql" -e "SELECT * FROM users" --format markdown
 
 # Generate a Mermaid ER Diagram from the CLI
-cargo run -- --uri "postgres://localhost:5432/sqlectron" --erd
+cargo run -- --uri "postgres://localhost:5432/rust_sql" --erd
 ```
 
 ### Docker

@@ -1,4 +1,4 @@
-/// Multi-dialect SQL formatter matching `sql-formatter` behavior in Sqlectron (`Mod-i` / `BROWSER_MENU_EDITOR_FORMAT`).
+/// Multi-dialect SQL formatter (`Mod-i` / `BROWSER_MENU_EDITOR_FORMAT`).
 pub fn format_sql(query: &str, client: Option<&str>) -> String {
     let trimmed = query.trim();
     if trimmed.is_empty() {

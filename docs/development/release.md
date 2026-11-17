@@ -1,12 +1,13 @@
-# Release
+# Release Process
 
-We use [electron-builder](https://github.com/electron-userland/electron-builder) to package and distribute the application. Which makes really easy doing that.
-
-1. Merge the changes to the main branch.
-1. On GitHub, open the Build action for the last commit and test the app, it will have uploaded the artifacts for each OS.
-1. Once you confirm the app is working as expected, then it is time to start the release process.
-1. Run `npm version <major|minor|patch>` based on the level of the changes being deployed. It will set a new version in the package.json and also create a new git tag for that.
-1. Run `git push --follow-tags` to push those changes to GitHub.
-1. Create a new release for that version at https://github.com/sqlectron/sqlectron-gui/releases. Don't forget to set the release title and the description with all the changes. **DO NOT CREATE A DRAFT RELEASE, PUBLISH IT DIRECTLY**, it won't trigger the Release action to upload the artificats because of [this issue](https://github.community/t/workflow-set-for-on-release-not-triggering-not-showing-up/16286/10).
-1. Once the release is created, the GitHub Release action will upload the artifacts for that build.
-1. Once the release artifacts have been uploaded, then update [Homebrew Cask](https://github.com/caskroom/homebrew-cask/blob/master/CONTRIBUTING.md#updating-a-cask).
+1. Update the version in `Cargo.toml` and `CHANGELOG.md`.
+2. Commit the release preparation:
+   ```bash
+   git commit -am "chore(release): vX.Y.Z"
+   ```
+3. Create and push a signed or annotated version tag:
+   ```bash
+   git tag -a vX.Y.Z -m "Release vX.Y.Z"
+   git push origin main --tags
+   ```
+4. GitHub Actions (`.github/workflows/release.yml`) will automatically build binaries for Linux, macOS, and Windows, generate `SHA256SUMS.txt`, and publish the GitHub Release.

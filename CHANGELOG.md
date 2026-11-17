@@ -10,14 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.39.0] - 2026-11-17
 
 ### Added
-- **Complete Rust Port of Sqlectron (`v1.39.0`)**:
+- **Cross-Database Core Engine**:
   - Full database adapter layer (`src/adapters/`) supporting PostgreSQL (`postgresql`), Amazon Redshift (`redshift`), MySQL (`mysql`), MariaDB (`mariadb`), Microsoft SQL Server (`sqlserver`), SQLite (`sqlite`), and Apache Cassandra (`cassandra`).
-  - Bit-compatible AES-256-CBC password encryption/decryption (`src/core/crypto.rs`) and `sqlectron.json` configuration compatibility (`src/core/config.rs`, `src/core/servers.rs`, `src/core/validators.rs`).
-  - Complete 14-slice Redux store equivalent (`src/state/mod.rs`: `config`, `servers`, `connections`, `databases`, `schemas`, `tables`, `columns`, `triggers`, `indexes`, `views`, `routines`, `queries`, `sqlscripts`, `status`).
+  - AES-256-CBC password encryption/decryption (`src/core/crypto.rs`) and `rust-sql.json` configuration management (`src/core/config.rs`, `src/core/servers.rs`, `src/core/validators.rs`).
+  - Complete 14-slice state store (`src/state/mod.rs`: `config`, `servers`, `connections`, `databases`, `schemas`, `tables`, `columns`, `triggers`, `indexes`, `views`, `routines`, `queries`, `sqlscripts`, `status`).
   - **Three User Interfaces**:
     - Native Desktop GUI (`--gui`) powered by `eframe` / `egui` (`src/gui/mod.rs`).
-    - Terminal UI (`--tui` / `--term`) powered by `ratatui` + `crossterm` (`src/tui/mod.rs`), cloning `sqlectron-term`.
-    - Web GUI & Electron-compatible IPC server (`--web`) powered by `axum` (`src/web/mod.rs`).
+    - Terminal UI (`--tui` / `--term`) powered by `ratatui` + `crossterm` (`src/tui/mod.rs`).
+    - Web GUI & IPC server (`--web`) powered by `axum` (`src/web/mod.rs`).
 - **Modern Developer Features**:
   - **Read-Only Mode & Destructive Query Safety Analyzer (`src/core/safety.rs`)**: Blocks mutations in Read-Only mode and flags `DELETE`/`UPDATE` without `WHERE`, `DROP`, and `TRUNCATE` statements.
   - **Parameterized Queries (`src/core/params.rs`)**: Automatic extraction and safe literal binding for `:named`, `@named`, and `$1` placeholders.

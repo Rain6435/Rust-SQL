@@ -24,7 +24,7 @@ pub fn escape_regexp_string(s: &str) -> String {
     out
 }
 
-/// Convert a JSON value to its Sqlectron display/export string (`src/common/utils/convert.ts`)
+/// Convert a JSON value to its display/export string representation
 pub fn value_to_string(value: &Value) -> String {
     match value {
         Value::Null => "NULL".to_string(),
@@ -79,7 +79,7 @@ pub fn rows_values_to_string(rows: &[Map<String, Value>]) -> Vec<Map<String, Val
     rows.iter().map(row_values_to_string).collect()
 }
 
-/// Compare two version strings using Sqlectron's exact `versionCompare` algorithm (`sqlectron-db-core/src/utils.ts`)
+/// Compare two dot-separated version strings
 pub fn version_compare(a: &str, b: &str) -> i32 {
     let a_parts: Vec<&str> = a.split('.').collect();
     let b_parts: Vec<&str> = b.split('.').collect();
@@ -104,7 +104,7 @@ pub fn version_compare(a: &str, b: &str) -> i32 {
     0
 }
 
-/// Trims leading/trailing newlines and ensures the statement ends with `;` (`sqlectron-db-core/src/utils.ts`)
+/// Trims leading/trailing newlines and ensures the statement ends with `;`
 pub fn append_semi_colon(sql: &str) -> String {
     let trimmed = sql.trim_matches('\n');
     if trimmed.ends_with(';') {
