@@ -4,11 +4,13 @@ pub mod assets;
 pub mod ipc_config_servers;
 pub mod ipc_db_metadata;
 pub mod ipc_db_queries;
+pub mod ipc_ssh_host_keys;
 
 pub use assets::RUST_SQL_WEB_HTML;
 
 use crate::adapters::DatabaseFacade;
 use crate::common::event::{BROWSER_CLIPBOARD_WRITE, LOGGER_ERROR};
+use crate::common::types::HostKeyChallenge;
 use crate::core::export::write_clipboard_text;
 use axum::{
     extract::State,
@@ -27,6 +29,8 @@ use tokio::sync::Mutex;
 pub struct WebIpcState {
     /// Mutex-protected [`DatabaseFacade`] handling all IPC database operations.
     pub db: Mutex<DatabaseFacade>,
+    /// Host-key challenges issued by `DB_CONNECT`; only these can be approved.
+    pub pending_host_keys: Mutex<Vec<HostKeyChallenge>>,
 }
 
 /// JSON payload for an incoming `/api/ipc` request.
@@ -50,6 +54,13 @@ pub struct IpcResponse {
     /// Optional error message when `ok == false`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// SSH host key the user must verify and approve before connecting again.
+    #[serde(
+        rename = "hostKeyChallenge",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub host_key_challenge: Option<Box<HostKeyChallenge>>,
 }
 
 impl IpcResponse {
@@ -59,6 +70,7 @@ impl IpcResponse {
             ok: true,
             data: serde_json::to_value(val).ok(),
             error: None,
+            host_key_challenge: None,
         }
     }
 
@@ -68,6 +80,7 @@ impl IpcResponse {
             ok: false,
             data: None,
             error: Some(msg.into()),
+            host_key_challenge: None,
         }
     }
 }
@@ -90,6 +103,9 @@ pub async fn dispatch_ipc_event(state: &WebIpcState, req: IpcRequest) -> IpcResp
         return resp;
     }
     if let Some(resp) = ipc_db_queries::handle_db_queries_ipc(state, event, args).await {
+        return resp;
+    }
+    if let Some(resp) = ipc_ssh_host_keys::handle_ssh_host_keys_ipc(state, event, args).await {
         return resp;
     }
 

@@ -2,7 +2,7 @@
 
 use crate::common::types::{Password, Server, SslConfig};
 use crate::gui::ServerFormDraft;
-use crate::tui::{DatabaseFocus, TuiApp, TuiRoute};
+use crate::tui::{TuiApp, TuiRoute};
 use crossterm::event::{self, KeyCode, KeyModifiers};
 use tokio::runtime::Runtime;
 
@@ -11,6 +11,9 @@ impl TuiApp {
     pub fn handle_key(&mut self, key: event::KeyEvent, rt: &Runtime) {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('q') {
             self.should_quit = true;
+            return;
+        }
+        if self.handle_host_key_key(key, rt) {
             return;
         }
 
@@ -73,20 +76,7 @@ impl TuiApp {
                     .get(self.selected_server_idx)
                     .cloned()
                 {
-                    if rt
-                        .block_on(self.store.connect(&srv.id, None, false, None))
-                        .is_ok()
-                    {
-                        let db = self.store.current_database().unwrap_or_default();
-                        let _ = rt.block_on(self.store.fetch_databases_if_needed());
-                        let _ = rt.block_on(self.store.fetch_tables_if_needed(&db));
-                        self.selected_table_idx = 0;
-                        self.db_focus = DatabaseFocus::TableList;
-                        self.route = TuiRoute::Database {
-                            server_id: srv.id,
-                            database: db,
-                        };
-                    }
+                    self.connect_and_open(&srv.id, rt);
                 }
             }
             _ => {}

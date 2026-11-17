@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **SSH tunnels now actually use SSH.** Previously the "SSH tunnel" option opened a local port
+  that connected straight to the database host, never contacting the bastion.
+  - Connections authenticate to the bastion with `russh` (SSH agent, then private key with
+    optional passphrase, then password; only the configured method is tried) and forward over a
+    `direct-tcpip` channel, so databases reachable only from the bastion now work.
+  - Bastion host keys are trusted on first use: the app shows the SHA-256 fingerprint and asks for
+    approval, re-confirmation is required every 180 days, and a changed key is refused with no
+    in-app override (delete the pin under Settings → "Trusted SSH host keys").
+  - New CLI flag `--trust-host-key SHA256:...` approves a known fingerprint in batch mode.
+  - SSH passwords, passphrases, key material, and the agent socket path are redacted from errors.
 - **Emulated data is no longer presented as real results.**
   - PostgreSQL and Redshift connection failures (wrong password, unreachable host, missing
     database) now return an error naming the host, port, and database, never the password.

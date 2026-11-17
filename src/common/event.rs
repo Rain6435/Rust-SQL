@@ -40,6 +40,12 @@ pub const DB_GET_CLIENTS_SYNC: &str = "DB_GET_CLIENTS_SYNC";
 pub const DB_CONNECT: &str = "DB_CONNECT";
 /// Returns `{ "mode": "live" | "emulated", "banner": string | null }` for a connected database.
 pub const DB_GET_CONNECTION_MODE: &str = "DB_GET_CONNECTION_MODE";
+/// Trust an SSH bastion host key previously returned in a `hostKeyChallenge` error.
+pub const SSH_HOST_KEY_APPROVE: &str = "SSH_HOST_KEY_APPROVE";
+/// List trusted SSH bastion host keys.
+pub const SSH_HOST_KEYS_LIST: &str = "SSH_HOST_KEYS_LIST";
+/// Delete the trusted host key for `(host, port)`; required before accepting a rotated key.
+pub const SSH_HOST_KEY_DELETE: &str = "SSH_HOST_KEY_DELETE";
 /// Disconnect a single database connection within the active server session.
 pub const DB_DISCONNECT_DATABASE: &str = "DB_DISCONNECT_DATABASE";
 /// Disconnect the entire active server session and any SSH tunnels.

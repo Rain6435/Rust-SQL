@@ -3,6 +3,7 @@
 
 pub mod config_servers;
 pub mod connections;
+pub mod host_keys;
 pub mod metadata;
 pub mod metadata_table;
 pub mod queries;

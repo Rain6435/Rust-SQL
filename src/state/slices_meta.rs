@@ -1,7 +1,9 @@
 //! State slice structures for configuration, servers, connections, and database metadata
 //! (databases, schemas, tables, columns, triggers, indexes, views, and routines).
 
-use crate::common::types::{Config, ConnectionMode, DbTable, DbView, Server, ValidationErrors};
+use crate::common::types::{
+    Config, ConnectionMode, DbTable, DbView, HostKeyChallenge, Server, ValidationErrors,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -67,6 +69,10 @@ pub struct ConnectionState {
     pub test_error: Option<String>,
     /// Live or emulated mode of the connected session. Emulated sessions must show a banner.
     pub mode: Option<ConnectionMode>,
+    /// SSH bastion host key awaiting the user's approval or re-confirmation.
+    pub host_key_prompt: Option<HostKeyChallenge>,
+    /// Server to reconnect once [`Self::host_key_prompt`] is approved (`None` for test probes).
+    pub host_key_retry_server_id: Option<String>,
 }
 
 /// Simple wrapper around an object's name used in state slices.

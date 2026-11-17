@@ -105,11 +105,14 @@ impl AppStore {
         }
 
         let was_already_connected = !self.connections.databases.is_empty();
+        self.connections.host_key_prompt = None;
+        self.connections.host_key_retry_server_id = None;
         if let Err(err) = self
             .db
-            .connect(decrypted_server.clone(), Some(&target_db))
+            .connect_checked(decrypted_server.clone(), Some(&target_db))
             .await
         {
+            let err = self.record_host_key_challenge(&err, Some(server_id));
             self.connections.connected = false;
             self.connections.connecting = false;
             self.connections.waiting_private_key_passphrase = false;
@@ -176,7 +179,10 @@ impl AppStore {
 
         let mut test_facade = DatabaseFacade::new();
         let db = server.database.clone();
-        let mut res = test_facade.connect(server, db.as_deref()).await;
+        let mut res = test_facade
+            .connect_checked(server, db.as_deref())
+            .await
+            .map_err(|e| self.record_host_key_challenge(&e, None));
         if res.is_ok() {
             let mode = test_facade.connection_mode(db.as_deref().unwrap_or("undefined"));
             if mode != Ok(ConnectionMode::Live) {

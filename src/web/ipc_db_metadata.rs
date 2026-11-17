@@ -38,9 +38,9 @@ pub async fn handle_db_metadata_ipc(
             };
             let database = str_arg(args, 1);
             let mut db = state.db.lock().await;
-            match db.connect(srv, database.as_deref()).await {
+            match db.connect_checked(srv, database.as_deref()).await {
                 Ok(()) => mode_response(&db, database.as_deref().unwrap_or("undefined")),
-                Err(e) => IpcResponse::err(e),
+                Err(e) => crate::web::ipc_ssh_host_keys::connect_error_response(state, e).await,
             }
         }
         DB_GET_CONNECTION_MODE => {

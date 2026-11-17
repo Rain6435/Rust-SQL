@@ -49,7 +49,11 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
         body: JSON.stringify({ event, args })
       });
       const json = await res.json();
-      if (!json.ok) throw new Error(json.error || 'IPC Error');
+      if (!json.ok) {
+        const err = new Error(json.error || 'IPC Error');
+        err.hostKeyChallenge = json.hostKeyChallenge || null;
+        throw err;
+      }
       return json.data;
     }
 
@@ -82,11 +86,27 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
       }
     }
 
+    // An unknown or 180-day-old SSH bastion key must be approved by the user before connecting.
+    async function connectWithHostKeyCheck(srv, db) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          return await ipc('DB_CONNECT', srv, db);
+        } catch (err) {
+          const ch = err.hostKeyChallenge;
+          if (!ch || attempt > 0) throw err;
+          const ok = window.confirm(err.message + '\n\nFingerprint: ' + ch.fingerprintSha256 +
+            '\n\nTrust this key and connect?');
+          if (!ok) throw err;
+          await ipc('SSH_HOST_KEY_APPROVE', ch);
+        }
+      }
+    }
+
     async function connectServer(srv, secret) {
       const dec = await ipc('SERVERS_DECRYPT_SECRETS', srv, secret);
       const db = dec.database || ':memory:';
       setConnectionMode(null);
-      setConnectionMode(await ipc('DB_CONNECT', dec, db));
+      setConnectionMode(await connectWithHostKeyCheck(dec, db));
       const tables = await ipc('DB_LIST_TABLES', db);
       const container = document.getElementById('main-area');
       container.innerHTML = `

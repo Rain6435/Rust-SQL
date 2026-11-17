@@ -96,6 +96,9 @@ pub enum DbCoreError {
         /// Driver error with any password occurrence redacted.
         reason: String,
     },
+    /// The SSH tunnel could not be opened (host key, authentication, or bastion error).
+    #[error("{0}")]
+    Tunnel(#[from] crate::core::tunnel::TunnelError),
     /// General driver or execution error message.
     #[error("{0}")]
     Message(String),

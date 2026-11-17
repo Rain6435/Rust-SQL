@@ -49,6 +49,26 @@ result set and in the footer, the TUI in the results title and status bar, the w
 banner and above each result set, and the CLI on stderr. The opt-in never affects PostgreSQL,
 Redshift, or SQLite, which always connect live.
 
+### SSH tunnels
+
+A connection can go through an SSH bastion (PostgreSQL and Redshift; the SSH client is
+[`russh`](https://crates.io/crates/russh)). Rust-SQL authenticates to the bastion and forwards
+the database connection over an SSH `direct-tcpip` channel, so the database host is resolved by
+the bastion and private hosts work. It never connects to the database directly.
+
+- **Authentication**: exactly one method is used, in this order of preference: the SSH agent
+  (when "Use ssh agent" is on, via `SSH_AUTH_SOCK`; the OpenSSH agent pipe on Windows), then the
+  private key (with its passphrase, if any), then the password. If that method fails, the error
+  names it and no other method is tried.
+- **Host keys (trust on first use)**: the first connection to a bastion shows its SHA-256
+  fingerprint and asks you to approve it. Approved keys are pinned per `host:port` and must be
+  re-confirmed every **180 days**. If the bastion ever presents a different key, the connection is
+  refused with no in-app override; delete the pin under Settings → "Trusted SSH host keys" once
+  your administrator confirms the key was rotated. In batch mode, pass
+  `--trust-host-key SHA256:...` to approve a key whose fingerprint you already know.
+- Passwords, passphrases, key material, and the agent socket path are never included in errors
+  or logs.
+
 ---
 
 ## Core Features

@@ -1,5 +1,6 @@
 //! Interactive Terminal User Interface (`--tui`) powered by `ratatui` and `crossterm`.
 
+pub mod host_key;
 pub mod input_database;
 pub mod input_servers;
 pub mod render_database;
