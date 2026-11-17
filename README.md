@@ -93,9 +93,12 @@ and must be entered again.
 
 ## Core Features
 
-1. **Read-Only Guardrail & Destructive Query Safety Analyzer ([src/core/safety.rs](src/core/safety.rs))**:
-   - **Read-Only Mode (`🔒 Read-Only` / `--read-only`)**: Blocks any `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `DROP`, or `TRUNCATE` statement from running against protected connections.
-   - **Destructive Query Detection (`analyze_query_safety`)**: Automatically flags `DELETE` or `UPDATE` statements missing a `WHERE` clause, as well as `DROP` and `TRUNCATE` statements, presenting a confirmation dialog before execution.
+1. **Read-Only Guardrail & Destructive Query Safety Analyzer ([src/core/safety/](src/core/safety/mod.rs))**:
+   - **Statements are parsed, not pattern-matched.** Each statement is parsed into an AST with [`sqlparser`](https://crates.io/crates/sqlparser) using the connection's dialect (PostgreSQL, Redshift, MySQL/MariaDB, SQL Server, SQLite; Cassandra CQL uses the generic grammar). Comments never count, and only a top-level `WHERE` counts for `DELETE` and `UPDATE`.
+   - **Read-Only Mode (`🔒 Read-Only` in the desktop GUI / `--read-only` in the CLI)**: only statements the analyzer positively recognizes as read-only run: `SELECT`/`VALUES`/`WITH ... SELECT` without `INTO` or `FOR UPDATE`, `EXPLAIN` (without `ANALYZE` of a write), `SHOW`/`DESCRIBE`, introspection `PRAGMA`s, and `BEGIN`/`COMMIT`/`ROLLBACK`. **Every other statement, including one the analyzer does not recognize or cannot parse, is treated as a modification and blocked** (for example `WITH ... DELETE`, `MERGE`, `REPLACE`, `CALL`, `COPY`, `GRANT`, `SET`, `SELECT ... INTO`).
+   - **Enforced by the database too.** In Read-Only mode the session itself is read-only: PostgreSQL and Redshift run `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`, SQLite files are opened with `SQLITE_OPEN_READ_ONLY`, and in-memory SQLite and the emulator use `PRAGMA query_only`. If the database refuses, the query is not run. The analyzer is a guardrail; the session setting is the backstop for things it cannot see, such as functions with side effects.
+   - **Destructive Query Detection (`analyze_script`)**: flags `DELETE`/`UPDATE` without a top-level `WHERE`, `DROP TABLE`/`SCHEMA`/`DATABASE`, `TRUNCATE`, and any statement that cannot be parsed as `Critical`, and asks for confirmation before running them. It fails closed: an unparseable script is never reported as safe.
+   - Read-Only mode is available in the desktop GUI and the headless CLI. The terminal UI and web UI do not have a Read-Only mode yet.
 2. **Parameterized Queries ([src/core/params.rs](src/core/params.rs))**:
    - Automatically detects `:named`, `@named`, and `$1` positional bind variables in SQL queries and renders inline parameter inputs in the GUI (`extract_query_parameters`, `bind_query_parameters`) with safe SQL literal escaping.
 3. **Saved SQL Bookmarks & Searchable Execution History ([src/core/bookmarks.rs](src/core/bookmarks.rs))**:

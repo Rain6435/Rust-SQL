@@ -1,9 +1,11 @@
 //! Multi-statement SQL parser, statement splitter, and command classifier.
 
 pub mod classifier;
+pub mod kind;
 pub mod splitter;
 
 use classifier::{classify_statement, extract_parameters};
+pub use kind::StatementKind;
 use serde::{Deserialize, Serialize};
 use splitter::{split_sql_statements, strip_comments};
 
@@ -46,9 +48,9 @@ pub struct IdentifiedStatement {
     pub end: usize,
     /// Trimmed raw SQL text of the statement.
     pub text: String,
-    /// Statement command classification (`SELECT`, `INSERT`, `CREATE_TABLE`, etc.).
+    /// Statement command classification (serialized as `SELECT`, `INSERT`, `CREATE_TABLE`, etc.).
     #[serde(rename = "type")]
-    pub statement_type: String,
+    pub statement_type: StatementKind,
     /// High-level execution category (`LISTING`, `MODIFICATION`, `INFORMATION`, `UNKNOWN`).
     pub execution_type: ExecutionType,
     /// Positional placeholders (`?`, `$1`) found inside the statement.

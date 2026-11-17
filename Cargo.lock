@@ -38,6 +38,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.1",
+ "sqlparser",
  "tar",
  "tempfile",
  "thiserror 2.0.21",
@@ -4888,6 +4889,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "recursive"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0786a43debb760f491b1bc0269fe5e84155353c67482b9e60d0cfb596054b43e"
+dependencies = [
+ "recursive-proc-macro-impl",
+ "stacker",
+]
+
+[[package]]
+name = "recursive-proc-macro-impl"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76009fbe0614077fc1a2ce255e3a1881a2e3a3527097d5dc6d8212c585e7e38b"
+dependencies = [
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5732,6 +5753,16 @@ name = "sponge-cursor"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a0219bd7d979d58245a4f41f695e1ac9f8befdffadd7f61f1bae9e39abc6620"
+
+[[package]]
+name = "sqlparser"
+version = "0.64.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92e0d273b4f8ddd14a35ed36862acbc9cc96cec578e36ee1881a9d42e0e0f2c8"
+dependencies = [
+ "log",
+ "recursive",
+]
 
 [[package]]
 name = "ssh-cipher"

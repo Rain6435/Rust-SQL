@@ -3,7 +3,7 @@
 use crate::adapters::{execute_sqlite_statement, CancellableQuery};
 use crate::common::types::{FieldInfo, QueryRowResult};
 use crate::core::errors::{CanceledByUserError, DbCoreError};
-use crate::core::sql_identifier::identify;
+use crate::core::sql_identifier::{identify, StatementKind};
 use async_trait::async_trait;
 use rusqlite::Connection;
 
@@ -83,7 +83,7 @@ pub fn execute_dialect_query_internal(
     };
 
     if adapter_key == "cassandra" && statements.len() > 1 {
-        let second_cmd = statements[1].statement_type.to_lowercase();
+        let second_cmd = statements[1].statement_type.as_str().to_lowercase();
         return Err(DbCoreError::Message(format!(
             "mismatched input '{second_cmd}' expecting EOF"
         )));
@@ -111,8 +111,8 @@ pub fn execute_dialect_query_internal(
     let mut sqlserver_non_select_cmd: Option<String> = None;
 
     for stmt in &statements {
-        let cmd = stmt.statement_type.as_str();
-        if cmd == "CREATE_DATABASE" {
+        let kind = stmt.statement_type;
+        if kind == StatementKind::CreateDatabase {
             let db_name = stmt
                 .text
                 .split_whitespace()
@@ -140,7 +140,7 @@ pub fn execute_dialect_query_internal(
             continue;
         }
 
-        if cmd == "DROP_DATABASE" {
+        if kind == StatementKind::DropDatabase {
             let db_name = stmt
                 .text
                 .split_whitespace()
@@ -164,7 +164,7 @@ pub fn execute_dialect_query_internal(
             continue;
         }
 
-        let mut res = execute_sqlite_statement(&conn, &stmt.text, cmd, stmt.execution_type)?;
+        let mut res = execute_sqlite_statement(&conn, &stmt.text, kind, stmt.execution_type)?;
 
         if res.command == "SELECT" {
             if res.rows.is_empty() && adapter_key != "sqlserver" && adapter_key != "sqlite" {

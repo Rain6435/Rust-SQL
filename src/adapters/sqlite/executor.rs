@@ -1,9 +1,10 @@
 //! SQLite statement execution, row/value conversion, and `sqlite3_interrupt` cancellable query support.
 
+use crate::adapters::sqlite::connection::open_sqlite;
 use crate::adapters::CancellableQuery;
 use crate::common::types::{FieldInfo, QueryRowResult};
 use crate::core::errors::{CanceledByUserError, DbCoreError};
-use crate::core::sql_identifier::{identify, ExecutionType};
+use crate::core::sql_identifier::{identify, ExecutionType, StatementKind};
 use async_trait::async_trait;
 use rusqlite::{types::ValueRef, Connection, InterruptHandle};
 use serde_json::{Map, Number, Value};
@@ -14,13 +15,14 @@ use std::sync::{Arc, Mutex};
 pub fn execute_sqlite_statement(
     conn: &Connection,
     stmt_text: &str,
-    stmt_type: &str,
+    stmt_type: StatementKind,
     exec_type: ExecutionType,
 ) -> Result<QueryRowResult, DbCoreError> {
     let is_mod = exec_type == ExecutionType::Modification
-        && !stmt_type.eq_ignore_ascii_case("SELECT")
-        && !stmt_type.eq_ignore_ascii_case("PRAGMA")
-        && !stmt_type.eq_ignore_ascii_case("EXPLAIN");
+        && !matches!(
+            stmt_type,
+            StatementKind::Select | StatementKind::Pragma | StatementKind::Explain
+        );
 
     if is_mod {
         let changes = conn.execute(stmt_text, []).map_err(map_sqlite_err)?;
@@ -78,11 +80,7 @@ pub fn execute_sqlite_statement(
 
         let row_count = rows_out.len();
         Ok(QueryRowResult {
-            command: if stmt_type.is_empty() {
-                "SELECT".to_string()
-            } else {
-                stmt_type.to_string()
-            },
+            command: stmt_type.to_string(),
             rows: rows_out,
             fields,
             row_count: Some(row_count),
@@ -107,6 +105,8 @@ pub struct SqliteCancellableQuery {
     pub shared_conn: Arc<Mutex<Option<Connection>>>,
     /// Path to the SQLite database file or `":memory:"`.
     pub db_path: String,
+    /// Read-Only flag shared with the owning adapter, used if the connection must be opened.
+    pub read_only: Arc<AtomicBool>,
     /// SQL script to execute.
     pub query_text: String,
     /// Native SQLite interrupt handle populated when execution begins.
@@ -128,14 +128,14 @@ impl CancellableQuery for SqliteCancellableQuery {
             .lock()
             .map_err(|e| DbCoreError::Message(e.to_string()))?;
         if guard.is_none() {
-            let conn = if self.db_path == ":memory:" {
-                Connection::open_in_memory().map_err(|e| DbCoreError::Message(e.to_string()))?
-            } else {
-                Connection::open(&self.db_path).map_err(|e| DbCoreError::Message(e.to_string()))?
-            };
-            *guard = Some(conn);
+            *guard = Some(open_sqlite(
+                &self.db_path,
+                self.read_only.load(Ordering::SeqCst),
+            )?);
         }
-        let conn = guard.as_ref().unwrap();
+        let Some(conn) = guard.as_ref() else {
+            return Err(DbCoreError::NoConnectionAvailable);
+        };
         if let Ok(mut ih) = self.interrupt_handle.lock() {
             *ih = Some(conn.get_interrupt_handle());
         }
@@ -152,7 +152,7 @@ impl CancellableQuery for SqliteCancellableQuery {
             results.push(execute_sqlite_statement(
                 conn,
                 &stmt.text,
-                &stmt.statement_type,
+                stmt.statement_type,
                 stmt.execution_type,
             )?);
         }

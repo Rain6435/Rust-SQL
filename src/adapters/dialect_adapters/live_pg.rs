@@ -3,8 +3,9 @@
 //! Connection failures are returned to the caller. They name the host, port, and database,
 //! and never the password. There is no fallback to the emulator.
 
-use crate::adapters::dialect_adapters::seed::dialect_display_name;
+use crate::adapters::dialect_adapters::seed::{dialect_display_name, DialectAdapter};
 use crate::adapters::dialect_adapters::sql_templates::pg_sql;
+use crate::adapters::sqlite::connection::set_query_only;
 use crate::common::types::{AdapterVersion, Server};
 use crate::core::errors::DbCoreError;
 use std::sync::Arc;
@@ -139,6 +140,44 @@ pub async fn connect_live_postgres(
         schema,
         version,
     })
+}
+
+/// `SET` command that makes every later transaction on the session read-only (or not).
+pub fn pg_read_only_command(read_only: bool) -> &'static str {
+    if read_only {
+        "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"
+    } else {
+        "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE"
+    }
+}
+
+impl DialectAdapter {
+    /// Enforces Read-Only mode in the database session: a read-only transaction default on a live
+    /// PostgreSQL/Redshift session, `PRAGMA query_only` on the emulator.
+    pub(crate) async fn apply_read_only(&self, read_only: bool) -> Result<(), DbCoreError> {
+        if let Some(client) = &self.pg_client {
+            return client
+                .batch_execute(pg_read_only_command(read_only))
+                .await
+                .map_err(|e| {
+                    DbCoreError::Message(format!(
+                        "Could not set the {} session read-{}: {}",
+                        dialect_display_name(&self.adapter_key),
+                        if read_only { "only" } else { "write" },
+                        describe_pg_error(&e)
+                    ))
+                });
+        }
+        match &self.emulated_conn {
+            Some(conn) => {
+                let conn = conn
+                    .lock()
+                    .map_err(|e| DbCoreError::Message(e.to_string()))?;
+                set_query_only(&conn, read_only)
+            }
+            None => Err(DbCoreError::NoConnectionAvailable),
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1,9 +1,18 @@
 //! SQL statement type classifier and positional parameter extractor.
 
-use crate::core::sql_identifier::ExecutionType;
+use crate::core::sql_identifier::{ExecutionType, StatementKind};
 
-/// Classifies a comment-stripped SQL statement into `(statement_type, ExecutionType)`.
-pub fn classify_statement(sql: &str, strict: bool) -> Result<(String, ExecutionType), String> {
+/// Classifies a comment-stripped SQL statement into `(StatementKind, ExecutionType)`.
+///
+/// This is a fast keyword classifier used to label results and route execution. It is not a
+/// safety check: [`crate::core::safety`] parses statements into an AST for that.
+pub fn classify_statement(
+    sql: &str,
+    strict: bool,
+) -> Result<(StatementKind, ExecutionType), String> {
+    use ExecutionType::{Information, Listing, Modification, Unknown as Unk};
+    use StatementKind as K;
+
     let tokens: Vec<String> = sql
         .split(|c: char| c.is_whitespace() || c == '(' || c == ';')
         .filter(|s| !s.is_empty())
@@ -12,7 +21,7 @@ pub fn classify_statement(sql: &str, strict: bool) -> Result<(String, ExecutionT
         .collect();
 
     let Some(first) = tokens.first().map(|s| s.as_str()) else {
-        return Ok(("UNKNOWN".to_string(), ExecutionType::Unknown));
+        return Ok((K::Unknown, Unk));
     };
 
     let second = tokens.get(1).map(|s| s.as_str()).unwrap_or("");
@@ -27,63 +36,58 @@ pub fn classify_statement(sql: &str, strict: bool) -> Result<(String, ExecutionT
         second
     };
 
-    match first {
-        "SELECT" | "WITH" | "VALUES" => Ok(("SELECT".to_string(), ExecutionType::Listing)),
-        "INSERT" => Ok(("INSERT".to_string(), ExecutionType::Modification)),
-        "UPDATE" => Ok(("UPDATE".to_string(), ExecutionType::Modification)),
-        "DELETE" => Ok(("DELETE".to_string(), ExecutionType::Modification)),
-        "TRUNCATE" => Ok(("TRUNCATE".to_string(), ExecutionType::Modification)),
-        "EXPLAIN" => Ok(("EXPLAIN".to_string(), ExecutionType::Information)),
-        "SHOW" => Ok(("SHOW".to_string(), ExecutionType::Listing)),
-        "PRAGMA" => Ok(("PRAGMA".to_string(), ExecutionType::Listing)),
-        "EXEC" | "EXECUTE" | "CALL" => Ok(("EXEC".to_string(), ExecutionType::Listing)),
-        "BEGIN" | "DECLARE" => Ok(("ANON_BLOCK".to_string(), ExecutionType::Modification)),
-        "SET" | "USE" => Ok((first.to_string(), ExecutionType::Modification)),
+    let classified = match first {
+        "SELECT" | "WITH" | "VALUES" => (K::Select, Listing),
+        "INSERT" => (K::Insert, Modification),
+        "REPLACE" => (K::Replace, Modification),
+        "UPDATE" => (K::Update, Modification),
+        "DELETE" => (K::Delete, Modification),
+        "MERGE" => (K::Merge, Modification),
+        "TRUNCATE" => (K::Truncate, Modification),
+        "COPY" => (K::Copy, Modification),
+        "GRANT" => (K::Grant, Modification),
+        "REVOKE" => (K::Revoke, Modification),
+        "EXPLAIN" => (K::Explain, Information),
+        "SHOW" => (K::Show, Listing),
+        "PRAGMA" => (K::Pragma, Listing),
+        "EXEC" | "EXECUTE" | "CALL" => (K::Exec, Listing),
+        "BEGIN" | "DECLARE" => (K::AnonBlock, Modification),
+        "SET" => (K::Set, Modification),
+        "USE" => (K::Use, Modification),
         "CREATE" => match obj {
-            "DATABASE" | "KEYSPACE" => {
-                Ok(("CREATE_DATABASE".to_string(), ExecutionType::Modification))
-            }
-            "SCHEMA" => Ok(("CREATE_SCHEMA".to_string(), ExecutionType::Modification)),
-            "TABLE" => Ok(("CREATE_TABLE".to_string(), ExecutionType::Modification)),
-            "VIEW" => Ok(("CREATE_VIEW".to_string(), ExecutionType::Modification)),
-            "TRIGGER" => Ok(("CREATE_TRIGGER".to_string(), ExecutionType::Modification)),
-            "FUNCTION" => Ok(("CREATE_FUNCTION".to_string(), ExecutionType::Modification)),
-            "PROCEDURE" => Ok(("CREATE_PROCEDURE".to_string(), ExecutionType::Modification)),
-            "INDEX" => Ok(("CREATE_INDEX".to_string(), ExecutionType::Modification)),
-            _ => Ok(("CREATE_TABLE".to_string(), ExecutionType::Modification)),
+            "DATABASE" | "KEYSPACE" => (K::CreateDatabase, Modification),
+            "SCHEMA" => (K::CreateSchema, Modification),
+            "VIEW" => (K::CreateView, Modification),
+            "TRIGGER" => (K::CreateTrigger, Modification),
+            "FUNCTION" => (K::CreateFunction, Modification),
+            "PROCEDURE" => (K::CreateProcedure, Modification),
+            "INDEX" => (K::CreateIndex, Modification),
+            _ => (K::CreateTable, Modification),
         },
         "DROP" => match obj {
-            "DATABASE" | "KEYSPACE" => {
-                Ok(("DROP_DATABASE".to_string(), ExecutionType::Modification))
-            }
-            "SCHEMA" => Ok(("DROP_SCHEMA".to_string(), ExecutionType::Modification)),
-            "TABLE" => Ok(("DROP_TABLE".to_string(), ExecutionType::Modification)),
-            "VIEW" => Ok(("DROP_VIEW".to_string(), ExecutionType::Modification)),
-            "TRIGGER" => Ok(("DROP_TRIGGER".to_string(), ExecutionType::Modification)),
-            "FUNCTION" => Ok(("DROP_FUNCTION".to_string(), ExecutionType::Modification)),
-            "PROCEDURE" => Ok(("DROP_PROCEDURE".to_string(), ExecutionType::Modification)),
-            "INDEX" => Ok(("DROP_INDEX".to_string(), ExecutionType::Modification)),
-            _ => Ok(("DROP_TABLE".to_string(), ExecutionType::Modification)),
+            "DATABASE" | "KEYSPACE" => (K::DropDatabase, Modification),
+            "SCHEMA" => (K::DropSchema, Modification),
+            "VIEW" => (K::DropView, Modification),
+            "TRIGGER" => (K::DropTrigger, Modification),
+            "FUNCTION" => (K::DropFunction, Modification),
+            "PROCEDURE" => (K::DropProcedure, Modification),
+            "INDEX" => (K::DropIndex, Modification),
+            _ => (K::DropTable, Modification),
         },
         "ALTER" => match obj {
-            "DATABASE" => Ok(("ALTER_DATABASE".to_string(), ExecutionType::Modification)),
-            "SCHEMA" => Ok(("ALTER_SCHEMA".to_string(), ExecutionType::Modification)),
-            "TABLE" => Ok(("ALTER_TABLE".to_string(), ExecutionType::Modification)),
-            "VIEW" => Ok(("ALTER_VIEW".to_string(), ExecutionType::Modification)),
-            "TRIGGER" => Ok(("ALTER_TRIGGER".to_string(), ExecutionType::Modification)),
-            "FUNCTION" => Ok(("ALTER_FUNCTION".to_string(), ExecutionType::Modification)),
-            "PROCEDURE" => Ok(("ALTER_PROCEDURE".to_string(), ExecutionType::Modification)),
-            "INDEX" => Ok(("ALTER_INDEX".to_string(), ExecutionType::Modification)),
-            _ => Ok(("ALTER_TABLE".to_string(), ExecutionType::Modification)),
+            "DATABASE" => (K::AlterDatabase, Modification),
+            "SCHEMA" => (K::AlterSchema, Modification),
+            "VIEW" => (K::AlterView, Modification),
+            "TRIGGER" => (K::AlterTrigger, Modification),
+            "FUNCTION" => (K::AlterFunction, Modification),
+            "PROCEDURE" => (K::AlterProcedure, Modification),
+            "INDEX" => (K::AlterIndex, Modification),
+            _ => (K::AlterTable, Modification),
         },
-        _ => {
-            if strict {
-                Err(format!("Invalid statement parser \"{first}\""))
-            } else {
-                Ok(("UNKNOWN".to_string(), ExecutionType::Unknown))
-            }
-        }
-    }
+        _ if strict => return Err(format!("Invalid statement parser \"{first}\"")),
+        _ => (K::Unknown, Unk),
+    };
+    Ok(classified)
 }
 
 /// Extracts positional parameter tokens (`?` and `$1`, `$2`, ...) from a SQL statement.

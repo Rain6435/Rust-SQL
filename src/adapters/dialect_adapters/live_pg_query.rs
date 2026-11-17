@@ -49,7 +49,7 @@ pub async fn execute_live_query(
         return Ok(Vec::new());
     }
     let mut labels = identify(query_text, false)
-        .map(|stmts| stmts.into_iter().map(|s| s.statement_type))
+        .map(|stmts| stmts.into_iter().map(|s| s.statement_type.to_string()))
         .into_iter()
         .flatten();
     let messages = client

@@ -16,9 +16,11 @@ The following versions of **Rust-SQL** currently receive security updates:
    - The key is derived with HKDF-SHA256 from a random 256-bit master key kept in the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service). There is no default key and no fallback store; if the keychain is unavailable, credentials are neither stored nor decrypted.
    - Each ciphertext is bound to its connection ID and field name as associated data, so a value moved to another connection or field fails to decrypt.
    - The master key and decrypted passwords are held in memory in buffers that are zeroed on drop.
-2. **Read-Only Guardrail & Destructive Query Analyzer (`src/core/safety.rs`)**:
-   - Connections can be locked into **Read-Only Mode** (`--read-only` or `🔒 Read-Only` in GUI), blocking all data-modifying and schema-altering statements (`INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `TRUNCATE`, `CREATE`).
-   - Unconditional `DELETE` and `UPDATE` statements without `WHERE` clauses are flagged before execution.
+2. **Read-Only Guardrail & Destructive Query Analyzer (`src/core/safety/`)**:
+   - Statements are parsed into an AST with `sqlparser` in the connection's dialect. The analyzer fails closed: a statement it cannot parse is `Critical`, needs confirmation, and is blocked in Read-Only mode.
+   - **Read-Only Mode** (`--read-only` or `🔒 Read-Only` in the desktop GUI) runs only statements positively recognized as read-only. Anything else, including statements the analyzer does not recognize, is treated as a modification and blocked.
+   - Read-Only Mode is also enforced by the database session where supported: PostgreSQL/Redshift read-only transactions, SQLite `SQLITE_OPEN_READ_ONLY` (files) or `PRAGMA query_only` (in-memory and emulated). If the session cannot be made read-only, nothing runs.
+   - `DELETE` and `UPDATE` without a top-level `WHERE` (a `WHERE` in a comment or a subquery does not count), `DROP TABLE`/`SCHEMA`/`DATABASE`, and `TRUNCATE` require confirmation.
 3. **Safe Parameter Binding (`src/core/params.rs`)**:
    - Named (`:param`, `@param`) and positional (`$1`) bind variables escape string literals to prevent accidental SQL injection during interactive query testing.
 
