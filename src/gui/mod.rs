@@ -163,7 +163,8 @@ impl RustSqlGuiApp {
 }
 
 impl eframe::App for RustSqlGuiApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
         if let Some(ref cfg) = self.store.config.data {
             if cfg.enabled_dark_theme {
                 ctx.set_visuals(egui::Visuals::dark());
@@ -173,24 +174,24 @@ impl eframe::App for RustSqlGuiApp {
             ctx.set_pixels_per_point((cfg.zoom_factor as f32).clamp(0.4, 3.0));
         }
 
-        self.handle_global_shortcuts(ctx);
+        self.handle_global_shortcuts(&ctx);
 
-        egui::TopBottomPanel::top("rust_sql_header")
-            .exact_height(56.0)
-            .show(ctx, |ui| self.render_header(ui));
+        egui::Panel::top("rust_sql_header")
+            .exact_size(56.0)
+            .show(ui, |ui| self.render_header(ui));
 
-        egui::TopBottomPanel::bottom("rust_sql_footer")
-            .exact_height(28.0)
-            .show(ctx, |ui| self.render_footer(ui));
+        egui::Panel::bottom("rust_sql_footer")
+            .exact_size(28.0)
+            .show(ui, |ui| self.render_footer(ui));
 
-        egui::CentralPanel::default().show(ctx, |ui| match self.route.clone() {
+        egui::CentralPanel::default().show(ui, |ui| match self.route.clone() {
             ActiveRoute::ServerManagement => self.render_server_management(ui),
             ActiveRoute::QueryBrowser(ref server_id) => {
-                self.render_query_browser(ctx, ui, server_id)
+                self.render_query_browser(&ctx, ui, server_id)
             }
         });
 
-        self.render_modals(ctx);
+        self.render_modals(&ctx);
     }
 }
 

@@ -110,28 +110,28 @@ impl RustSqlGuiApp {
 
     /// Renders the application menu bar and breadcrumb navigation header.
     pub(crate) fn render_header(&mut self, ui: &mut egui::Ui) {
-        egui::menu::bar(ui, |ui| {
+        egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("File", |ui| {
                 if ui.button("New Tab (Ctrl+T)").clicked() {
                     if let Some(db) = self.store.current_database() {
                         self.store.new_query(&db);
                     }
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui.button("Close Tab (Ctrl+W)").clicked() {
                     if let Some(id) = self.store.queries.current_query_id {
                         self.store.remove_query(id);
                     }
-                    ui.close_menu();
+                    ui.close();
                 }
                 ui.separator();
                 if ui.button("Save Query (Ctrl+S)").clicked() {
                     self.show_save_query_modal = true;
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui.button("Open Query (Ctrl+O)").clicked() {
                     self.show_open_query_modal = true;
-                    ui.close_menu();
+                    ui.close();
                 }
                 ui.separator();
                 if ui.button("Quit (Ctrl+Q)").clicked() {
@@ -141,13 +141,13 @@ impl RustSqlGuiApp {
             ui.menu_button("Query", |ui| {
                 if ui.button("Execute (Ctrl+Enter / Ctrl+R)").clicked() {
                     self.trigger_execute_current_query();
-                    ui.close_menu();
+                    ui.close();
                 }
             });
             ui.menu_button("Edit", |ui| {
                 if ui.button("Beautify Query (Ctrl+I)").clicked() {
                     self.format_current_query();
-                    ui.close_menu();
+                    ui.close();
                 }
             });
             ui.menu_button("View", |ui| {
@@ -163,20 +163,20 @@ impl RustSqlGuiApp {
                         };
                         let base = self.settings_draft.to_base_config();
                         let _ = self.store.save_config(&base);
-                        ui.close_menu();
+                        ui.close();
                     }
                 }
             });
             ui.menu_button("Find", |ui| {
                 if ui.button("Search databases (Shift+Ctrl+9)").clicked() {
                     self.sidebar_collapsed = false;
-                    ui.close_menu();
+                    ui.close();
                 }
             });
             ui.menu_button("Help", |ui| {
                 if ui.button("Keyboard Shortcuts").clicked() {
                     self.show_shortcuts_modal = true;
-                    ui.close_menu();
+                    ui.close();
                 }
                 ui.hyperlink_to(
                     "Report Issue",

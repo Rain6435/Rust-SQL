@@ -69,7 +69,7 @@ impl RustSqlGuiApp {
                                 &tbl.name,
                                 tbl.schema.as_deref(),
                             ));
-                            ui.close_menu();
+                            ui.close();
                         }
                         ui.separator();
                         if !disabled_features.iter().any(|f| f == "scriptCreateTable")
@@ -83,7 +83,7 @@ impl RustSqlGuiApp {
                                 DbObjectType::Table,
                                 tbl.schema.as_deref(),
                             ));
-                            ui.close_menu();
+                            ui.close();
                         }
                         for (label, act) in [
                             ("Select Statement", ScriptActionType::Select),
@@ -100,7 +100,7 @@ impl RustSqlGuiApp {
                                     DbObjectType::Table,
                                     tbl.schema.as_deref(),
                                 ));
-                                ui.close_menu();
+                                ui.close();
                             }
                         }
                     });
@@ -197,7 +197,7 @@ impl RustSqlGuiApp {
                             &vw.name,
                             vw.schema.as_deref(),
                         ));
-                        ui.close_menu();
+                        ui.close();
                     }
                     if !disabled_features.iter().any(|f| f == "scriptCreateTable")
                         && ui.button("Create Statement").clicked()
@@ -210,7 +210,7 @@ impl RustSqlGuiApp {
                             DbObjectType::View,
                             vw.schema.as_deref(),
                         ));
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
             }
@@ -235,7 +235,7 @@ impl RustSqlGuiApp {
                             DbObjectType::Function,
                             fn_item.schema.as_deref(),
                         ));
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
             }
@@ -260,7 +260,7 @@ impl RustSqlGuiApp {
                             DbObjectType::Procedure,
                             pr_item.schema.as_deref(),
                         ));
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
             }

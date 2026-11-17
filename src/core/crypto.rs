@@ -1,9 +1,9 @@
 //! AES-256-CBC password encryption and decryption for saved server credentials.
 
 use crate::common::types::EncryptedPassword;
-use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
+use aes::cipher::{block_padding::Pkcs7, BlockModeDecrypt, BlockModeEncrypt, KeyIvInit};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use rand::RngCore;
+use rand::Rng;
 use thiserror::Error;
 
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
@@ -55,14 +55,14 @@ pub fn encrypt(plain_text: &str, secret: &str) -> Result<EncryptedPassword, Cryp
 
     let key = derive_key(secret);
     let mut iv = [0u8; 16];
-    rand::thread_rng().fill_bytes(&mut iv);
+    rand::rng().fill_bytes(&mut iv);
 
     let pt_bytes = plain_text.as_bytes();
     let mut buf = vec![0u8; pt_bytes.len() + 16];
     buf[..pt_bytes.len()].copy_from_slice(pt_bytes);
 
     let ct = Aes256CbcEnc::new(&key.into(), &iv.into())
-        .encrypt_padded_mut::<Pkcs7>(&mut buf, pt_bytes.len())
+        .encrypt_padded::<Pkcs7>(&mut buf, pt_bytes.len())
         .map_err(|_| CryptoError::InvalidEncryptedFormat)?;
 
     Ok(EncryptedPassword {
@@ -96,7 +96,7 @@ pub fn decrypt(encrypted: &EncryptedPassword, secret: &str) -> Result<String, Cr
         .map_err(|_| CryptoError::InvalidEncryptedFormat)?;
 
     let pt = Aes256CbcDec::new(&key.into(), &iv.into())
-        .decrypt_padded_mut::<Pkcs7>(&mut ct_vec)
+        .decrypt_padded::<Pkcs7>(&mut ct_vec)
         .map_err(|_| CryptoError::InvalidEncryptedFormat)?;
 
     String::from_utf8(pt.to_vec()).map_err(|_| CryptoError::InvalidEncryptedFormat)

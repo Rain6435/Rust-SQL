@@ -193,7 +193,7 @@ impl RustSqlGuiApp {
                                         ui.label(&text).context_menu(|ui| {
                                             if ui.button("Open Preview").clicked() {
                                                 self.preview_cell_value = Some(val.clone());
-                                                ui.close_menu();
+                                                ui.close();
                                             }
                                         });
                                     }

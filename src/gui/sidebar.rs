@@ -12,16 +12,16 @@ impl RustSqlGuiApp {
         server_id: &str,
     ) {
         if !self.sidebar_collapsed {
-            egui::SidePanel::left("db_sidebar")
+            egui::Panel::left("db_sidebar")
                 .resizable(true)
-                .default_width(250.0)
-                .width_range(200.0..=600.0)
-                .show_inside(ui, |ui| {
+                .default_size(250.0)
+                .size_range(200.0..=600.0)
+                .show(ui, |ui| {
                     self.render_sidebar(ui, server_id);
                 });
         }
 
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.horizontal(|ui| {
                 if ui
                     .small_button(if self.sidebar_collapsed {
@@ -106,11 +106,11 @@ impl RustSqlGuiApp {
                         let _ = rt.block_on(self.store.fetch_tables_if_needed(&db_name));
                         let _ = rt.block_on(self.store.fetch_views_if_needed(&db_name));
                         let _ = rt.block_on(self.store.fetch_routines_if_needed(&db_name));
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui.button("➕ Open Tab").clicked() {
                         self.store.new_query(&db_name);
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
 
