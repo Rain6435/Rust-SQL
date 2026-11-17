@@ -1,21 +1,17 @@
 //! Integration tests for SQL DDL/DML script generation, `SELECT TOP` limits,
 //! statement execution (`INSERT`, `SELECT`, `UPDATE`, `DELETE`), and query cancellation.
 
-use rust_sql::adapters::{clear_select_limit, create_server, set_select_limit};
+use rust_sql::adapters::{
+    clear_select_limit, create_server, set_emulation_enabled, set_select_limit,
+};
 use rust_sql::common::types::{Server, SslConfig};
 
-/// Verifies DDL/DML script generation, `get_query_select_top`, statement execution, and query cancellation across all 7 dialects.
+/// Verifies scripts, `get_query_select_top`, execution, and cancellation for SQLite (live) and
+/// the four opted-in emulated dialects. Live PostgreSQL is covered by `live_postgres_suite.rs`.
 #[tokio::test]
-async fn test_all_7_adapters_scripts_and_queries_spec() {
-    let adapters = [
-        "sqlite",
-        "postgresql",
-        "redshift",
-        "mysql",
-        "mariadb",
-        "sqlserver",
-        "cassandra",
-    ];
+async fn test_sqlite_and_emulated_adapters_scripts_and_queries_spec() {
+    set_emulation_enabled(true);
+    let adapters = ["sqlite", "mysql", "mariadb", "sqlserver", "cassandra"];
 
     for adapter_key in adapters {
         let srv_cfg = Server {
@@ -62,7 +58,7 @@ async fn test_all_7_adapters_scripts_and_queries_spec() {
                 select_script,
                 "SELECT [id], [username], [email], [password], [role_id], [createdat] FROM [users];"
             ),
-            "postgresql" | "redshift" | "sqlite" => assert_eq!(
+            "sqlite" => assert_eq!(
                 select_script,
                 "SELECT \"id\", \"username\", \"email\", \"password\", \"role_id\", \"createdat\" FROM \"users\";"
             ),
@@ -88,7 +84,7 @@ async fn test_all_7_adapters_scripts_and_queries_spec() {
             .get_table_update_script("users", Some("public"))
             .await
             .expect("update script");
-        if adapter_key == "postgresql" {
+        if adapter_key == "sqlite" {
             assert_eq!(
                 update_script,
                 "UPDATE \"public\".\"users\"\n SET \"id\"=?, \"username\"=?, \"email\"=?, \"password\"=?, \"role_id\"=?, \"createdat\"=?\n WHERE <condition>;"
@@ -110,12 +106,6 @@ async fn test_all_7_adapters_scripts_and_queries_spec() {
             .unwrap();
         match adapter_key {
             "mysql" | "mariadb" => assert_eq!(top_default, "SELECT * FROM `test_table` LIMIT 1000"),
-            "postgresql" | "redshift" => {
-                assert_eq!(
-                    top_default,
-                    "SELECT * FROM \"public\".\"test_table\" LIMIT 1000"
-                )
-            }
             "sqlite" | "cassandra" => {
                 assert_eq!(top_default, "SELECT * FROM \"test_table\" LIMIT 1000")
             }

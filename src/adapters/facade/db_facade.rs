@@ -3,8 +3,8 @@
 use crate::adapters::facade::{create_server, DatabaseConnection, ServerSession};
 use crate::adapters::{get_adapters, CancellableQuery};
 use crate::common::types::{
-    AdapterInfo, DatabaseFilter, ListRoutineResult, ListTableColumnsResult, ListTableResult,
-    ListViewResult, SchemaFilter, Server, TableKeysResult,
+    AdapterInfo, ConnectionMode, DatabaseFilter, ListRoutineResult, ListTableColumnsResult,
+    ListTableResult, ListViewResult, SchemaFilter, Server, TableKeysResult,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -59,6 +59,13 @@ impl DatabaseFacade {
             return Err(err.to_string());
         }
         Ok(())
+    }
+
+    /// Returns whether `database`'s connection is live or emulated.
+    pub fn connection_mode(&self, database: &str) -> Result<ConnectionMode, String> {
+        self.get_db(database)?
+            .connection_mode()
+            .map_err(|e| e.to_string())
     }
 
     /// Disconnects a specific `database` from the active server session.

@@ -5,8 +5,8 @@ use crate::adapters::{
     adapter_factory, wrap_identifier_for_adapter, CancellableQuery, DatabaseAdapter,
 };
 use crate::common::types::{
-    AdapterVersion, DatabaseFilter, ListRoutineResult, ListTableColumnsResult, ListTableResult,
-    ListViewResult, QueryRowResult, SchemaFilter, Server, TableKeysResult,
+    AdapterVersion, ConnectionMode, DatabaseFilter, ListRoutineResult, ListTableColumnsResult,
+    ListTableResult, ListViewResult, QueryRowResult, SchemaFilter, Server, TableKeysResult,
 };
 use crate::core::errors::DbCoreError;
 use crate::core::tunnel::{connect_tunnel, TunnelHandle};
@@ -110,6 +110,11 @@ impl DatabaseConnection {
     /// Returns the connected database server version metadata.
     pub fn get_version(&self) -> Result<AdapterVersion, DbCoreError> {
         Ok(self.check_is_connected()?.get_version())
+    }
+
+    /// Returns whether this connection is live or emulated.
+    pub fn connection_mode(&self) -> Result<ConnectionMode, DbCoreError> {
+        Ok(self.check_is_connected()?.connection_mode())
     }
 
     /// Quotes an identifier using the connection's dialect rules.

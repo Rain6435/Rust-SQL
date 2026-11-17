@@ -1,7 +1,9 @@
 //! Integration tests for all 7 database adapters' metadata introspection and common utilities.
 
-use rust_sql::adapters::{create_server, ADAPTERS, CLIENTS};
-use rust_sql::common::types::{FilterClause, FilterList, SchemaFilter, Server, SslConfig};
+use rust_sql::adapters::{create_server, set_emulation_enabled, ADAPTERS, CLIENTS};
+use rust_sql::common::types::{
+    ConnectionMode, FilterClause, FilterList, SchemaFilter, Server, SslConfig,
+};
 use rust_sql::common::utils::{append_semi_colon, escape_regexp_string, titlize, version_compare};
 
 /// Verifies that the static [`ADAPTERS`] and [`CLIENTS`] registries are identical and contain all 7 dialects.
@@ -26,13 +28,14 @@ fn test_string_and_regexp_utils() {
     assert_eq!(append_semi_colon("\ntest\n"), "test;");
 }
 
-/// Verifies version discovery and schema/table/view/routine/column/trigger/index/key introspection across all 7 dialects.
+/// Verifies metadata introspection for SQLite (live) and the four opted-in emulated dialects.
+///
+/// PostgreSQL and Redshift always connect live and are covered by `live_postgres_suite.rs`.
 #[tokio::test]
-async fn test_all_7_adapters_metadata_spec() {
+async fn test_sqlite_and_emulated_adapters_metadata_spec() {
+    set_emulation_enabled(true);
     let adapters = [
         ("sqlite", None),
-        ("postgresql", Some("public")),
-        ("redshift", Some("public")),
         ("mysql", None),
         ("mariadb", None),
         ("sqlserver", Some("dbo")),
@@ -58,6 +61,12 @@ async fn test_all_7_adapters_metadata_spec() {
         let mut server_session = create_server(srv_cfg.clone()).expect("create_server");
         let db_conn = server_session.create_connection(srv_cfg.database.as_deref());
         db_conn.connect().await.expect("connect");
+        let expected_mode = if adapter_key == "sqlite" {
+            ConnectionMode::Live
+        } else {
+            ConnectionMode::Emulated
+        };
+        assert_eq!(db_conn.connection_mode().expect("mode"), expected_mode);
 
         if adapter_key == "sqlite" {
             db_conn
@@ -76,8 +85,6 @@ async fn test_all_7_adapters_metadata_spec() {
 
         let ver = db_conn.get_version().expect("get_version");
         let expected_ver_name = match adapter_key {
-            "postgresql" => "PostgreSQL",
-            "redshift" => "Redshift",
             "mysql" => "MySQL",
             "mariadb" => "MariaDB",
             "sqlite" => "SQLite",
@@ -121,8 +128,7 @@ async fn test_all_7_adapters_metadata_spec() {
             .await
             .expect("list_routines");
         match adapter_key {
-            "postgresql" => assert_eq!(routines.len(), 2),
-            "redshift" | "mysql" | "mariadb" | "sqlserver" => assert_eq!(routines.len(), 1),
+            "mysql" | "mariadb" | "sqlserver" => assert_eq!(routines.len(), 1),
             "sqlite" | "cassandra" => assert!(routines.is_empty()),
             _ => unreachable!(),
         }
@@ -137,7 +143,7 @@ async fn test_all_7_adapters_metadata_spec() {
             .list_table_triggers("users", None)
             .await
             .expect("list_table_triggers");
-        if matches!(adapter_key, "cassandra" | "redshift") {
+        if adapter_key == "cassandra" {
             assert!(triggers.is_empty());
         } else {
             assert_eq!(triggers, vec!["dummy_trigger".to_string()]);
@@ -150,7 +156,6 @@ async fn test_all_7_adapters_metadata_spec() {
         match adapter_key {
             "cassandra" => assert!(indexes.is_empty()),
             "sqlite" => assert_eq!(indexes, vec!["users_id_index"]),
-            "postgresql" | "redshift" => assert_eq!(indexes, vec!["users_pkey"]),
             "mysql" | "mariadb" => assert_eq!(indexes, vec!["PRIMARY", "role_id"]),
             "sqlserver" => assert!(indexes[0].starts_with("PK__users__")),
             _ => unreachable!(),
@@ -168,9 +173,7 @@ async fn test_all_7_adapters_metadata_spec() {
             }))
             .await
             .expect("list_schemas");
-        if matches!(adapter_key, "postgresql" | "redshift") {
-            assert_eq!(schemas.len(), 2);
-        } else if adapter_key == "sqlserver" {
+        if adapter_key == "sqlserver" {
             assert!(schemas.contains(&"dummy_schema".to_string()));
         } else {
             assert!(schemas.is_empty());

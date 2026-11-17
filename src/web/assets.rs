@@ -24,6 +24,7 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
     th { background: #f1f5f9; font-weight: bold; }
     button { cursor: pointer; padding: 6px 12px; border-radius: 4px; border: 1px solid #94a3b8; background: #f8fafc; }
     button.primary { background: #16a34a; color: white; border-color: #15803d; }
+    .emulated-banner { background: #b91c1c; color: #fff; font-weight: bold; padding: 6px 12px; }
   </style>
 </head>
 <body>
@@ -32,6 +33,7 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
     <div id="breadcrumb">servers</div>
     <div id="conn-actions"></div>
   </header>
+  <div id="emulated-banner" class="emulated-banner" data-testid="emulated-banner" hidden></div>
   <div id="main-area">
     <div id="server-list"></div>
   </div>
@@ -52,6 +54,14 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
     }
 
     window.rustSql = { ipc };
+    let emulatedBanner = null;
+
+    function setConnectionMode(info) {
+      emulatedBanner = info && info.mode === 'emulated' ? info.banner : null;
+      const el = document.getElementById('emulated-banner');
+      el.textContent = emulatedBanner || '';
+      el.hidden = !emulatedBanner;
+    }
 
     async function loadServers() {
       const cfg = await ipc('CONFIG_GET_FULL', true);
@@ -75,7 +85,8 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
     async function connectServer(srv, secret) {
       const dec = await ipc('SERVERS_DECRYPT_SECRETS', srv, secret);
       const db = dec.database || ':memory:';
-      await ipc('DB_CONNECT', dec, db);
+      setConnectionMode(null);
+      setConnectionMode(await ipc('DB_CONNECT', dec, db));
       const tables = await ipc('DB_LIST_TABLES', db);
       const container = document.getElementById('main-area');
       container.innerHTML = `
@@ -112,6 +123,13 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
       const results = await ipc('DB_EXECUTE_QUERY', db, sql);
       const resDiv = document.getElementById('query-result');
       resDiv.innerHTML = '';
+      if (emulatedBanner) {
+        const banner = document.createElement('div');
+        banner.className = 'emulated-banner';
+        banner.setAttribute('data-testid', 'result-emulated-banner');
+        banner.textContent = emulatedBanner;
+        resDiv.appendChild(banner);
+      }
       for (const r of results) {
         const wrap = document.createElement('div');
         wrap.className = 'grid-query-wrapper';

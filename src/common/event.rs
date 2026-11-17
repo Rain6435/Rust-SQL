@@ -38,6 +38,8 @@ pub const LOGGER_ERROR: &str = "LOGGER_ERROR";
 pub const DB_GET_CLIENTS_SYNC: &str = "DB_GET_CLIENTS_SYNC";
 /// Establish a connection to a server and target database.
 pub const DB_CONNECT: &str = "DB_CONNECT";
+/// Returns `{ "mode": "live" | "emulated", "banner": string | null }` for a connected database.
+pub const DB_GET_CONNECTION_MODE: &str = "DB_GET_CONNECTION_MODE";
 /// Disconnect a single database connection within the active server session.
 pub const DB_DISCONNECT_DATABASE: &str = "DB_DISCONNECT_DATABASE";
 /// Disconnect the entire active server session and any SSH tunnels.

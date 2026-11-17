@@ -23,6 +23,21 @@ pub struct AdapterInfo {
     pub disabled_features: Vec<String>,
 }
 
+/// Whether a connection talks to the real server or to the in-memory emulator.
+///
+/// Every front end must show [`EMULATED_BANNER`] whenever the mode is [`ConnectionMode::Emulated`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ConnectionMode {
+    /// Queries and metadata come from the configured database server.
+    Live,
+    /// Queries run against a seeded in-memory engine. Results are not from the user's server.
+    Emulated,
+}
+
+/// Warning that every front end displays while a connection is [`ConnectionMode::Emulated`].
+pub const EMULATED_BANNER: &str = "EMULATED \u{2014} results are not from your server.";
+
 /// Version metadata reported by a connected database server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -75,6 +75,27 @@ pub enum DbCoreError {
     /// Cassandra adapter does not support cancellable queries.
     #[error("\"query\" function is not implementd by cassandra client.")]
     CassandraCancelUnsupported,
+    /// No live driver exists for this dialect and emulation was not explicitly enabled.
+    #[error(
+        "Live connections for {0} are not implemented. Rust-SQL can only emulate {0} with an \
+         in-memory engine whose results are not from your server. Start Rust-SQL with --emulate, \
+         or set \"emulateUnsupportedDialects\": true in the config file, to opt in to emulation."
+    )]
+    LiveConnectionNotImplemented(String),
+    /// A live connection attempt failed. Never contains the password.
+    #[error("Could not connect to {dialect} at {host}:{port} (database \"{database}\"): {reason}")]
+    ConnectionFailed {
+        /// Dialect display name (`PostgreSQL`, `Redshift`).
+        dialect: String,
+        /// Host that was dialed.
+        host: String,
+        /// Port that was dialed.
+        port: u32,
+        /// Database name that was requested.
+        database: String,
+        /// Driver error with any password occurrence redacted.
+        reason: String,
+    },
     /// General driver or execution error message.
     #[error("{0}")]
     Message(String),

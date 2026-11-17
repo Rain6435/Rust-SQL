@@ -1,16 +1,47 @@
-//! Default version metadata, PostgreSQL network connection helper, and schema seeding
-//! for multi-dialect database sessions.
+//! Construction and connection of [`DialectAdapter`]: live PostgreSQL/Redshift connections,
+//! and the explicitly opted-in in-memory emulator for dialects without a live driver.
 
-use crate::adapters::dialect_adapters::sql_templates::{mysql_sql, pg_sql, sqlserver_sql};
-use crate::adapters::dialect_adapters::DialectAdapter;
-use crate::common::types::{AdapterVersion, Server};
-use crate::common::utils::version_compare;
+use crate::adapters::dialect_adapters::live_pg::connect_live_postgres;
+use crate::adapters::get_adapters;
+use crate::common::types::{AdapterVersion, DatabaseFilter, Server};
 use crate::core::errors::DbCoreError;
+use crate::core::filters::filter_database_name;
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
-/// Returns default server version metadata for `adapter_key` when not connected to a live network server.
+/// Multi-dialect adapter: live for PostgreSQL/Redshift, emulated (opt-in only) for the rest.
+pub struct DialectAdapter {
+    /// Adapter key (`postgresql`, `redshift`, `mysql`, `mariadb`, `sqlserver`, `cassandra`).
+    pub adapter_key: String,
+    /// Server connection configuration.
+    pub server: Server,
+    /// Target database or keyspace name.
+    pub database: String,
+    /// Default schema name (`"public"` for PostgreSQL/Redshift, `"dbo"` for SQL Server).
+    pub default_schema: String,
+    /// Server version (live) or the imitated dialect's placeholder version (emulated).
+    pub version: AdapterVersion,
+    /// Whether the user opted in to emulation for dialects without a live driver.
+    pub allow_emulation: bool,
+    /// Live `tokio_postgres::Client`, set only after a successful live connection.
+    pub pg_client: Option<Arc<tokio_postgres::Client>>,
+    /// In-memory emulator, set only when emulation was opted in and chosen at connect time.
+    pub emulated_conn: Option<Arc<Mutex<Connection>>>,
+    /// Database list tracked by the emulator for `CREATE DATABASE` / `DROP DATABASE`.
+    pub extra_databases: Arc<Mutex<Vec<String>>>,
+}
+
+impl DialectAdapter {
+    pub(crate) fn schema_or_default<'a>(&'a self, schema: Option<&'a str>) -> &'a str {
+        schema
+            .filter(|s| !s.is_empty())
+            .unwrap_or(&self.default_schema)
+    }
+}
+
+/// Placeholder version metadata reported by the emulator for `adapter_key`.
+///
+/// Emulated sessions have no server, so this only names the dialect being imitated.
 pub fn default_version_for_adapter(adapter_key: &str) -> AdapterVersion {
     let mk = |name: &str, ver: &str, s: &str| AdapterVersion {
         name: name.to_string(),
@@ -32,7 +63,25 @@ pub fn default_version_for_adapter(adapter_key: &str) -> AdapterVersion {
     }
 }
 
-/// Seeds the default `roles`, `users`, and `email_view` objects in an in-memory dialect session.
+/// Lists the databases tracked by an emulated session, applying `filter`.
+pub fn list_databases_for_emulator(
+    extra_databases: &Arc<Mutex<Vec<String>>>,
+    filter: Option<&DatabaseFilter>,
+) -> Result<Vec<String>, DbCoreError> {
+    let dbs = extra_databases
+        .lock()
+        .map(|g| g.clone())
+        .map_err(|e| DbCoreError::Message(e.to_string()))?;
+    let mut out: Vec<String> = dbs
+        .into_iter()
+        .filter(|name| filter_database_name(name, filter))
+        .collect();
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
+/// Seeds the default `roles`, `users`, and `email_view` objects in an emulated session.
 pub fn seed_default_dialect_schema(conn: &Connection, adapter_key: &str) {
     let _ = conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY AUTOINCREMENT, name VARCHAR(100));
@@ -52,71 +101,28 @@ pub fn seed_default_dialect_schema(conn: &Connection, adapter_key: &str) {
     }
 }
 
-/// Attempts a live TCP + `tokio_postgres` handshake when connecting to PostgreSQL or Redshift.
-pub async fn try_connect_live_postgres(
-    server: &Server,
-    database: &str,
-) -> Option<(
-    Arc<tokio_postgres::Client>,
-    Option<String>,
-    Option<AdapterVersion>,
-)> {
-    let host = server
-        .local_host
-        .as_deref()
-        .or(server.host.as_deref())
-        .unwrap_or("localhost");
-    let port = server
-        .local_port
-        .map(|p| p as u32)
-        .or(server.port)
-        .unwrap_or(5432);
-    let Ok(Ok(stream)) = tokio::time::timeout(
-        Duration::from_millis(120),
-        tokio::net::TcpStream::connect(format!("{host}:{port}")),
-    )
-    .await
-    else {
-        return None;
-    };
-    drop(stream);
-    let user = server.user.as_deref().unwrap_or("postgres");
-    let pw = server
-        .password
-        .as_ref()
-        .and_then(|p| p.as_plain())
-        .unwrap_or("");
-    let conn_str = format!("host={host} port={port} user={user} password={pw} dbname={database}");
-    let Ok((client, connection)) = tokio_postgres::connect(&conn_str, tokio_postgres::NoTls).await
-    else {
-        return None;
-    };
-    tokio::spawn(async move {
-        let _ = connection.await;
-    });
-    let schema = client
-        .query_one(pg_sql::GET_SCHEMA, &[])
-        .await
-        .ok()
-        .and_then(|r| r.try_get::<_, String>(0).ok());
-    let version = client
-        .query_one(pg_sql::GET_VERSION, &[])
-        .await
-        .ok()
-        .and_then(|r| r.try_get::<_, String>(0).ok())
-        .map(|ver_str| {
-            let parts: Vec<&str> = ver_str.split(' ').collect();
-            AdapterVersion {
-                name: parts.first().copied().unwrap_or("PostgreSQL").to_string(),
-                version: parts.get(1).copied().unwrap_or("14.0").to_string(),
-                string: ver_str,
-            }
-        });
-    Some((Arc::new(client), schema, version))
+/// Returns the display name registered for `adapter_key`, or the key itself.
+pub(crate) fn dialect_display_name(adapter_key: &str) -> String {
+    get_adapters()
+        .into_iter()
+        .find(|a| a.key == adapter_key)
+        .map(|a| a.name)
+        .unwrap_or_else(|| adapter_key.to_string())
+}
+
+/// Borrowed handle to whichever backend a connected [`DialectAdapter`] uses.
+pub(crate) enum Backend<'a> {
+    /// Live `tokio-postgres` client.
+    Live(&'a Arc<tokio_postgres::Client>),
+    /// Opted-in in-memory emulator.
+    Emulated(&'a Arc<Mutex<Connection>>),
 }
 
 impl DialectAdapter {
-    /// Creates a new [`DialectAdapter`] for `adapter_key`, `server`, and `database`.
+    /// Creates a new, disconnected [`DialectAdapter`] for `adapter_key`, `server`, and `database`.
+    ///
+    /// Emulation is disallowed until [`with_emulation_allowed`](Self::with_emulation_allowed)
+    /// opts in, so dialects without a live driver fail to connect by default.
     pub fn new(adapter_key: &str, server: &Server, database: Option<&str>) -> Self {
         let db_name = database
             .filter(|s| !s.is_empty())
@@ -132,50 +138,108 @@ impl DialectAdapter {
             "sqlserver" => "dbo".to_string(),
             _ => db_name.clone(),
         };
-        let conn = Connection::open_in_memory().expect("in-memory sqlite for dialect state");
-        seed_default_dialect_schema(&conn, adapter_key);
         Self {
             adapter_key: adapter_key.to_string(),
             server: server.clone(),
             database: db_name.clone(),
             default_schema,
-            version: default_version_for_adapter(adapter_key),
+            version: AdapterVersion::default(),
+            allow_emulation: false,
             pg_client: None,
-            emulated_conn: Arc::new(Mutex::new(conn)),
+            emulated_conn: None,
             extra_databases: Arc::new(Mutex::new(vec!["rust_sql".to_string(), db_name])),
         }
     }
 
+    /// Sets whether this adapter may use the emulator when the dialect has no live driver.
+    ///
+    /// This never affects PostgreSQL or Redshift, which always connect live.
+    pub fn with_emulation_allowed(mut self, allowed: bool) -> Self {
+        self.allow_emulation = allowed;
+        self
+    }
+
+    /// Returns the connected backend, or [`DbCoreError::NoConnectionAvailable`].
+    pub(crate) fn backend(&self) -> Result<Backend<'_>, DbCoreError> {
+        match (&self.pg_client, &self.emulated_conn) {
+            (Some(client), _) => Ok(Backend::Live(client)),
+            (None, Some(conn)) => Ok(Backend::Emulated(conn)),
+            (None, None) => Err(DbCoreError::NoConnectionAvailable),
+        }
+    }
+
+    /// Error returned by operations that have no live implementation yet.
+    pub(crate) fn live_unsupported(&self, what: &str) -> DbCoreError {
+        DbCoreError::Message(format!(
+            "{what} is not implemented for live {} connections yet.",
+            dialect_display_name(&self.adapter_key)
+        ))
+    }
+
     pub(crate) async fn connect_internal(&mut self) -> Result<(), DbCoreError> {
+        self.pg_client = None;
+        self.emulated_conn = None;
         if matches!(self.adapter_key.as_str(), "postgresql" | "redshift") {
-            if let Some((client, schema, version)) =
-                try_connect_live_postgres(&self.server, &self.database).await
-            {
-                if let Some(s) = schema {
-                    self.default_schema = s;
-                }
-                if let Some(v) = version {
-                    self.version = v;
-                }
-                self.pg_client = Some(client);
-                return Ok(());
+            let live =
+                connect_live_postgres(&self.adapter_key, &self.server, &self.database).await?;
+            if let Some(schema) = live.schema {
+                self.default_schema = schema;
             }
+            self.version = live.version;
+            self.pg_client = Some(live.client);
+            return Ok(());
         }
-        if let Some(ref host) = self.server.host {
-            if host.starts_with("invalid.") || host == "255.255.255.255" {
-                return Err(DbCoreError::Message(format!(
-                    "connect ECONNREFUSED {host}:{}",
-                    self.server.port.unwrap_or(0)
-                )));
-            }
+        if !self.allow_emulation {
+            return Err(DbCoreError::LiveConnectionNotImplemented(
+                dialect_display_name(&self.adapter_key),
+            ));
         }
+        let conn = Connection::open_in_memory()
+            .map_err(|e| DbCoreError::Message(format!("Could not start the emulator: {e}")))?;
+        seed_default_dialect_schema(&conn, &self.adapter_key);
         self.version = default_version_for_adapter(&self.adapter_key);
-        let _ = (
-            pg_sql::GET_SCHEMA,
-            mysql_sql::GET_VERSION,
-            sqlserver_sql::GET_VERSION,
-            version_compare(&self.version.version, "8.0"),
-        );
+        self.emulated_conn = Some(Arc::new(Mutex::new(conn)));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::adapters::DatabaseAdapter;
+    use crate::common::types::ConnectionMode;
+
+    fn server(key: &str) -> Server {
+        Server {
+            client: key.to_string(),
+            host: Some("db.example.test".to_string()),
+            port: Some(3306),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn dialects_without_driver_refuse_to_connect_without_opt_in() {
+        for key in ["mysql", "mariadb", "sqlserver", "cassandra"] {
+            let mut adapter = DialectAdapter::new(key, &server(key), None);
+            let err = adapter.connect().await.expect_err("must not connect");
+            assert!(
+                matches!(err, DbCoreError::LiveConnectionNotImplemented(_)),
+                "{key}: {err}"
+            );
+            assert!(err.to_string().contains("not implemented"), "{key}: {err}");
+            assert!(adapter.query("SELECT 1").is_err(), "{key}");
+            assert!(adapter.execute_query("SELECT * FROM users").await.is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn opted_in_dialects_report_emulated_mode() {
+        for key in ["mysql", "mariadb", "sqlserver", "cassandra"] {
+            let mut adapter =
+                DialectAdapter::new(key, &server(key), None).with_emulation_allowed(true);
+            adapter.connect().await.expect("emulated connect");
+            assert_eq!(adapter.connection_mode(), ConnectionMode::Emulated);
+        }
     }
 }

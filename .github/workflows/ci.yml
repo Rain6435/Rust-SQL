@@ -121,11 +121,72 @@ jobs:
         run: cargo test --verbose
 
       - name: Smoke test CLI modes
+        shell: bash
         run: |
           cargo run -- --version
           cargo run -- --help
-          cargo run -- --uri "postgres://localhost:5432/rust_sql" --erd
+          cargo run -- --emulate --uri "mysql://root@localhost:3306/rust_sql" --erd
+          if cargo run -- --uri "mysql://root@localhost:3306/rust_sql" --erd; then
+            echo "MySQL without --emulate must fail: no live driver exists"; exit 1
+          fi
+          if cargo run -- --uri "postgres://localhost:5432/rust_sql" --erd; then
+            echo "PostgreSQL with no server running must fail, not fall back to emulation"; exit 1
+          fi
           cargo run -- -e "CREATE TABLE ci_test (id INT, label TEXT); INSERT INTO ci_test VALUES (1, 'ok'); SELECT * FROM ci_test;" --format markdown
+
+  live-postgres:
+    name: Live PostgreSQL Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: rust_sql
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      RUST_SQL_TEST_PG_HOST: 127.0.0.1
+      RUST_SQL_TEST_PG_PORT: 5432
+      RUST_SQL_TEST_PG_USER: postgres
+      RUST_SQL_TEST_PG_PASSWORD: password
+      RUST_SQL_TEST_PG_DB: rust_sql
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libssl-dev \
+            libsqlite3-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libgtk-3-dev \
+            libgl1-mesa-dev \
+            libegl1-mesa-dev \
+            libfontconfig1-dev \
+            libfreetype-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run live PostgreSQL suite
+        run: cargo test --test live_postgres_suite -- --nocapture
 
   docs:
     name: Rustdoc Check

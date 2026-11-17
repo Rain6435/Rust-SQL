@@ -1,5 +1,6 @@
 //! Global keyboard shortcuts, query execution triggers, top menu/breadcrumb header, and status footer.
 
+use crate::common::types::ConnectionMode;
 use crate::core::sql_formatter::format_sql;
 use crate::core::updater::check_for_updates;
 use crate::gui::{ActiveRoute, RustSqlGuiApp};
@@ -235,6 +236,9 @@ impl RustSqlGuiApp {
     /// Renders the bottom status bar and quick links footer.
     pub(crate) fn render_footer(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
+            if self.store.connections.mode == Some(ConnectionMode::Emulated) {
+                crate::gui::query_results::render_emulated_banner(ui);
+            }
             if !self.store.status.is_empty() {
                 ui.label(RichText::new(&self.store.status).italics());
             } else {
