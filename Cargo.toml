@@ -24,7 +24,7 @@ tokio = { version = "1.40", features = ["full"] }
 async-trait = "0.1"
 thiserror = "1.0"
 uuid = { version = "1.10", features = ["v4", "serde"] }
-aes = "0.8"
+aes = "0.9"
 cbc = { version = "0.1", features = ["alloc", "block-padding"] }
 base64 = "0.22"
 rand = "0.8"
