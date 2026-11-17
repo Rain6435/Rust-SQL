@@ -42,8 +42,12 @@ pub struct QueryHistoryEntry {
     pub id: u64,
     /// Target database name.
     pub database: String,
-    /// Executed SQL text.
+    /// Executed SQL text, with placeholders as written (parameters are bound separately).
     pub sql: String,
+    /// The query with its parameters substituted, labeled "display only, not executed".
+    /// Replay uses [`sql`](Self::sql), never this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_sql: Option<String>,
     /// Execution duration in milliseconds.
     pub duration_ms: u64,
     /// Total rows returned across all statements.
@@ -122,6 +126,7 @@ impl BookmarkManager {
             id: self.next_history_id,
             database: database.to_string(),
             sql: sql.to_string(),
+            display_sql: None,
             duration_ms,
             row_count,
             success: error.is_none(),
@@ -132,6 +137,13 @@ impl BookmarkManager {
             self.history.truncate(500);
         }
         entry
+    }
+
+    /// Attaches display-only bound SQL to the most recent history entry.
+    pub fn set_latest_display_sql(&mut self, display_sql: Option<String>) {
+        if let Some(entry) = self.history.first_mut() {
+            entry.display_sql = display_sql;
+        }
     }
 
     /// Filters execution history entries case-insensitively by `sql` or `database`.

@@ -3,6 +3,7 @@
 pub mod host_key;
 pub mod input_database;
 pub mod input_servers;
+pub mod params;
 pub mod render_database;
 pub mod render_servers;
 
@@ -49,6 +50,8 @@ pub enum DatabaseFocus {
     TableList,
     /// Top-right SQL query editor box.
     QueryArea,
+    /// Parameter values listed under the SQL (only when the query has placeholders).
+    Params,
     /// Bottom-right query results table.
     QueryResults,
 }
@@ -67,6 +70,8 @@ pub struct TuiApp {
     pub selected_db_idx: usize,
     /// Active focus pane in [`TuiRoute::Database`].
     pub db_focus: DatabaseFocus,
+    /// Highlighted parameter index in [`DatabaseFocus::Params`].
+    pub selected_param_idx: usize,
     /// Editable draft fields for [`TuiRoute::ServerSave`].
     pub form_draft: ServerFormDraft,
     /// Active field index (0..7) in [`TuiRoute::ServerSave`].
@@ -93,6 +98,7 @@ impl TuiApp {
             selected_table_idx: 0,
             selected_db_idx: 0,
             db_focus: DatabaseFocus::TableList,
+            selected_param_idx: 0,
             form_draft: ServerFormDraft::from_server(None),
             form_field_idx: 0,
             should_quit: false,

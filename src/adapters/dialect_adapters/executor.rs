@@ -1,8 +1,9 @@
 //! Multi-statement dialect query executor and cancellable query handle implementation.
 
-use crate::adapters::{execute_sqlite_statement, CancellableQuery};
+use crate::adapters::{execute_sqlite_statement_with_params, CancellableQuery};
 use crate::common::types::{FieldInfo, QueryRowResult};
 use crate::core::errors::{CanceledByUserError, DbCoreError};
+use crate::core::params::QueryParams;
 use crate::core::sql_identifier::{identify, StatementKind};
 use async_trait::async_trait;
 use rusqlite::Connection;
@@ -22,6 +23,8 @@ pub struct DialectCancellableQuery {
     pub extra_databases: Arc<Mutex<Vec<String>>>,
     /// Raw SQL query text.
     pub query_text: String,
+    /// Values for the query's placeholders, bound through SQLite prepared statements.
+    pub params: QueryParams,
     /// Atomic cancellation flag.
     pub canceled: Arc<AtomicBool>,
 }
@@ -38,6 +41,7 @@ impl CancellableQuery for DialectCancellableQuery {
             &self.emulated_conn,
             &self.extra_databases,
             &self.query_text,
+            &self.params,
         )
     }
 
@@ -50,11 +54,13 @@ impl CancellableQuery for DialectCancellableQuery {
 /// Executes `query_text` on the in-memory emulator, imitating the result shapes of `adapter_key`.
 ///
 /// Only called for opted-in emulated sessions. Results are not from any real server.
+/// Parameters are bound through SQLite prepared statements, like a live adapter.
 pub fn execute_dialect_query_internal(
     adapter_key: &str,
     emulated_conn: &Arc<Mutex<Connection>>,
     extra_databases: &Arc<Mutex<Vec<String>>>,
     query_text: &str,
+    params: &QueryParams,
 ) -> Result<Vec<QueryRowResult>, DbCoreError> {
     let trimmed = query_text.trim();
 
@@ -164,7 +170,13 @@ pub fn execute_dialect_query_internal(
             continue;
         }
 
-        let mut res = execute_sqlite_statement(&conn, &stmt.text, kind, stmt.execution_type)?;
+        let mut res = execute_sqlite_statement_with_params(
+            &conn,
+            &stmt.text,
+            kind,
+            stmt.execution_type,
+            params,
+        )?;
 
         if res.command == "SELECT" {
             if res.rows.is_empty() && adapter_key != "sqlserver" && adapter_key != "sqlite" {

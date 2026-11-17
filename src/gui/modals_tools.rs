@@ -92,7 +92,7 @@ impl RustSqlGuiApp {
                                     "[{}] {}ms ({} rows)",
                                     h.database, h.duration_ms, h.row_count
                                 ));
-                                ui.monospace(&h.sql);
+                                ui.monospace(h.display_sql.as_deref().unwrap_or(&h.sql));
                                 if ui.small_button("Replay").clicked() {
                                     self.store.update_query_if_needed(&h.sql, None, None);
                                 }

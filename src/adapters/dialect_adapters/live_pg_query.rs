@@ -1,9 +1,11 @@
 //! Live PostgreSQL / Redshift query execution and cancellation via `tokio-postgres`.
 
 use crate::adapters::dialect_adapters::live_pg::describe_pg_error;
+use crate::adapters::dialect_adapters::live_pg_params::execute_live_query_with_params;
 use crate::adapters::CancellableQuery;
 use crate::common::types::{FieldInfo, QueryRowResult};
 use crate::core::errors::{CanceledByUserError, DbCoreError};
+use crate::core::params::QueryParams;
 use crate::core::sql_identifier::identify;
 use async_trait::async_trait;
 use serde_json::{Map, Value};
@@ -11,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio_postgres::{Client, NoTls, SimpleQueryMessage};
 
-fn finish_statement(
+pub(crate) fn finish_statement(
     label: Option<String>,
     fields: &mut Vec<FieldInfo>,
     rows: &mut Vec<Map<String, Value>>,
@@ -104,6 +106,8 @@ pub struct PgCancellableQuery {
     pub client: Arc<Client>,
     /// Raw SQL query text.
     pub query_text: String,
+    /// Values for the query's placeholders, bound through prepared statements.
+    pub params: QueryParams,
     /// Set once the user cancels.
     pub canceled: Arc<AtomicBool>,
 }
@@ -114,7 +118,8 @@ impl CancellableQuery for PgCancellableQuery {
         if self.canceled.load(Ordering::SeqCst) {
             return Err(DbCoreError::CanceledByUser(CanceledByUserError::new()));
         }
-        let res = execute_live_query(&self.client, &self.query_text).await;
+        let res =
+            execute_live_query_with_params(&self.client, &self.query_text, &self.params).await;
         if res.is_err() && self.canceled.load(Ordering::SeqCst) {
             return Err(DbCoreError::CanceledByUser(CanceledByUserError::new()));
         }

@@ -103,6 +103,18 @@ impl IpcResponse {
     }
 }
 
+/// Reads the optional typed parameter object at `idx` (`{"id": 5, "name": "x"}`).
+///
+/// JSON types are kept: numbers stay numbers and strings stay text. The values are bound
+/// through prepared statements, never substituted into the SQL.
+pub(crate) fn params_arg(
+    args: &[Value],
+    idx: usize,
+) -> Result<crate::core::params::QueryParams, IpcResponse> {
+    crate::core::params::ParamValue::map_from_json(args.get(idx).unwrap_or(&Value::Null))
+        .map_err(IpcResponse::err)
+}
+
 pub(crate) fn str_arg(args: &[Value], idx: usize) -> Option<String> {
     args.get(idx)
         .and_then(|v| v.as_str())

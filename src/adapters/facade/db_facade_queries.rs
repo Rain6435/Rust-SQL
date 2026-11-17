@@ -6,6 +6,7 @@ use crate::core::export::{
     export_query_result_to_clipboard, export_query_result_to_file_path, open_query_from_file,
     save_query_to_file,
 };
+use crate::core::params::QueryParams;
 use serde_json::{Map, Value};
 
 impl DatabaseFacade {
@@ -16,9 +17,25 @@ impl DatabaseFacade {
         query_id: u64,
         query_text: &str,
     ) -> Result<(), String> {
+        self.create_cancellable_query_with_params(
+            database,
+            query_id,
+            query_text,
+            &QueryParams::new(),
+        )
+    }
+
+    /// Registers a cancellable query under `query_id` that binds `params` through prepared statements.
+    pub fn create_cancellable_query_with_params(
+        &mut self,
+        database: &str,
+        query_id: u64,
+        query_text: &str,
+        params: &QueryParams,
+    ) -> Result<(), String> {
         let q = self
             .get_db(database)?
-            .query(query_text)
+            .query_with_params(query_text, params)
             .map_err(|e| e.to_string())?;
         self.cancellable_queries.insert(query_id, q);
         Ok(())
@@ -49,8 +66,19 @@ impl DatabaseFacade {
         database: &str,
         query_text: &str,
     ) -> Result<Vec<QueryRowResult>, String> {
+        self.execute_query_with_params(database, query_text, &QueryParams::new())
+            .await
+    }
+
+    /// Executes `query_text` on `database`, binding `params` through prepared statements.
+    pub async fn execute_query_with_params(
+        &self,
+        database: &str,
+        query_text: &str,
+        params: &QueryParams,
+    ) -> Result<Vec<QueryRowResult>, String> {
         self.get_db(database)?
-            .execute_query(query_text)
+            .execute_query_with_params(query_text, params)
             .await
             .map_err(|e| e.to_string())
     }

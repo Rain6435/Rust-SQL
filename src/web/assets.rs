@@ -2,7 +2,9 @@
 //!
 //! The page signs in through `/api/login`, keeps the CSRF token in memory only, and sends it
 //! as `X-CSRF-Token` on every IPC call. It connects by saved connection ID and never sees a
-//! password. Values from the server or the database are inserted as text, never as HTML.
+//! password. Query parameters are sent as a JSON object, so numbers, booleans, and null keep
+//! their types; the server binds them through prepared statements. Values from the server or
+//! the database are inserted as text, never as HTML.
 
 /// Single-page application HTML/JS bundle communicating with `/api/ipc`.
 pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
@@ -164,7 +166,7 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
         </div>
         <div id="workspace" class="react-tabs__tab-panel react-tabs__tab-panel--selected">
           <div id="querybox1"><div contenteditable="true" id="editor-box" style="border:1px solid #ccc;padding:8px;min-height:80px;font-family:monospace"></div></div>
-          <div><button class="primary" id="exec-btn">Execute</button></div>
+          <div><input id="params-input" data-testid="query-params" style="width:60%" placeholder='Parameters as JSON, for example {"id": 5, "name": "x"}' /> <button class="primary" id="exec-btn">Execute</button></div>
           <div id="query-result"></div>
         </div>
       `;
@@ -184,12 +186,20 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
         tblContainer.appendChild(item);
       }
       document.getElementById('exec-btn').onclick = () => {
-        runQuery(db, document.getElementById('editor-box').innerText);
+        const raw = document.getElementById('params-input').value.trim();
+        let params = null;
+        try {
+          params = raw ? JSON.parse(raw) : null;
+        } catch (e) {
+          document.getElementById('query-result').textContent = 'Parameters must be a JSON object: ' + e.message;
+          return;
+        }
+        runQuery(db, document.getElementById('editor-box').innerText, params);
       };
     }
 
-    async function runQuery(db, sql) {
-      const results = await ipc('DB_EXECUTE_QUERY', db, sql);
+    async function runQuery(db, sql, params) {
+      const results = await ipc('DB_EXECUTE_QUERY', db, sql, params || null);
       const resDiv = document.getElementById('query-result');
       resDiv.innerHTML = '';
       if (emulatedBanner) {

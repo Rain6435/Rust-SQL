@@ -1,4 +1,5 @@
-//! TUI rendering for the connected database workspace (`TableList`, `QueryArea`, `QueryResults`).
+//! TUI rendering for the connected database workspace (`TableList`, `QueryArea` with its
+//! parameters, `QueryResults`).
 
 use crate::common::types::{ConnectionMode, EMULATED_BANNER};
 use crate::common::utils::value_to_string;
@@ -28,7 +29,7 @@ impl TuiApp {
 
         let r_chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(6), Constraint::Min(5)])
+            .constraints([Constraint::Length(8), Constraint::Min(5)])
             .split(h_chunks[1]);
 
         let tables = self
@@ -75,17 +76,15 @@ impl TuiApp {
         );
         f.render_widget(tbl_list, h_chunks[0]);
 
-        let query_str = self
-            .store
-            .current_query()
-            .map(|q| q.query.as_str())
-            .unwrap_or("");
-        let query_border_style = if self.db_focus == DatabaseFocus::QueryArea {
+        let query_border_style = if matches!(
+            self.db_focus,
+            DatabaseFocus::QueryArea | DatabaseFocus::Params
+        ) {
             Style::default().fg(Color::Yellow)
         } else {
             Style::default()
         };
-        let query_box = Paragraph::new(query_str).block(
+        let query_box = Paragraph::new(self.query_box_text()).block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(query_border_style)
@@ -166,6 +165,9 @@ impl TuiApp {
             }
             DatabaseFocus::QueryArea => {
                 " [C-x/F5] Execute  [C-u] Clear  [Tab/C-e] Switch Focus  [Esc] Table List"
+            }
+            DatabaseFocus::Params => {
+                " [Up/Down] Parameter  [C-t] Type  [C-x/F5] Execute  [Tab] Results  [Esc] Editor"
             }
             DatabaseFocus::QueryResults => " [Tab/C-e] Editor  [Esc] Table List  [q] Quit",
         };

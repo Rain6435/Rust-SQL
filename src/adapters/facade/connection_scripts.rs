@@ -1,9 +1,35 @@
-//! SQL script generation and table truncation helpers for [`DatabaseConnection`].
+//! Parameterized query execution, SQL script generation, and table truncation helpers for
+//! [`DatabaseConnection`].
 
 use crate::adapters::facade::DatabaseConnection;
+use crate::adapters::CancellableQuery;
+use crate::common::types::QueryRowResult;
 use crate::core::errors::DbCoreError;
+use crate::core::params::QueryParams;
+use std::sync::Arc;
 
 impl DatabaseConnection {
+    /// Creates a cancellable query handle that binds `params` through prepared statements.
+    pub fn query_with_params(
+        &self,
+        query_text: &str,
+        params: &QueryParams,
+    ) -> Result<Arc<dyn CancellableQuery>, DbCoreError> {
+        self.check_is_connected()?
+            .query_with_params(query_text, params)
+    }
+
+    /// Executes `query_text` to completion, binding `params` through prepared statements.
+    pub async fn execute_query_with_params(
+        &self,
+        query_text: &str,
+        params: &QueryParams,
+    ) -> Result<Vec<QueryRowResult>, DbCoreError> {
+        self.check_is_connected()?
+            .execute_query_with_params(query_text, params)
+            .await
+    }
+
     pub(crate) fn resolve_schema(&self, schema: Option<&str>) -> String {
         match schema.filter(|s| !s.is_empty()) {
             Some(s) => format!("{}.", self.wrap(s)),

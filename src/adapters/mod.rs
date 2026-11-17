@@ -14,13 +14,17 @@ pub use dialect_adapters::DialectAdapter;
 pub use emulation::{emulation_enabled, has_live_driver, set_emulation_enabled};
 pub use facade::*;
 pub use registry::*;
-pub use sqlite::{execute_sqlite_statement, map_sqlite_err, SqliteAdapter, SqliteCancellableQuery};
+pub use sqlite::{
+    execute_sqlite_statement, execute_sqlite_statement_with_params, map_sqlite_err, SqliteAdapter,
+    SqliteCancellableQuery,
+};
 
 use crate::common::types::{
     AdapterVersion, ConnectionMode, DatabaseFilter, ListRoutineResult, ListTableColumnsResult,
     ListTableResult, ListViewResult, QueryRowResult, SchemaFilter, Server, TableKeysResult,
 };
 use crate::core::errors::DbCoreError;
+use crate::core::params::QueryParams;
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -131,11 +135,35 @@ pub trait DatabaseAdapter: Send + Sync {
         Ok(Vec::new())
     }
 
-    /// Creates a [`CancellableQuery`] handle for `query_text`.
-    fn query(&self, query_text: &str) -> Result<Arc<dyn CancellableQuery>, DbCoreError>;
+    /// Creates a [`CancellableQuery`] handle for `query_text`, which has no parameters.
+    fn query(&self, query_text: &str) -> Result<Arc<dyn CancellableQuery>, DbCoreError> {
+        self.query_with_params(query_text, &QueryParams::new())
+    }
+
+    /// Creates a [`CancellableQuery`] handle that binds `params` to `query_text`'s placeholders.
+    ///
+    /// Required for every adapter: parameters must go through the driver's prepared-statement
+    /// API (see [`crate::core::params::prepare_statement`]), never into the SQL text.
+    fn query_with_params(
+        &self,
+        query_text: &str,
+        params: &QueryParams,
+    ) -> Result<Arc<dyn CancellableQuery>, DbCoreError>;
 
     /// Executes `query_text` (supporting multiple semicolon-separated statements) and returns results.
-    async fn execute_query(&self, query_text: &str) -> Result<Vec<QueryRowResult>, DbCoreError>;
+    async fn execute_query(&self, query_text: &str) -> Result<Vec<QueryRowResult>, DbCoreError> {
+        self.execute_query_with_params(query_text, &QueryParams::new())
+            .await
+    }
+
+    /// Executes `query_text`, binding `params` through the driver's prepared-statement API.
+    ///
+    /// Required for every adapter, like [`query_with_params`](Self::query_with_params).
+    async fn execute_query_with_params(
+        &self,
+        query_text: &str,
+        params: &QueryParams,
+    ) -> Result<Vec<QueryRowResult>, DbCoreError>;
 
     /// Builds a dialect-specific `SELECT TOP / LIMIT` query for `table`.
     async fn get_query_select_top(
