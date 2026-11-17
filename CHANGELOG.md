@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.41.0] - 2026-11-17
+
+### Added
+- **Built-in Self-Updater (`src/core/updater/`)**:
+  - Added `--check-update` and `--update` CLI flags (`Rust-SQL --check-update`, `Rust-SQL --update`) and a `Help -> Check for Updates` modal in the Desktop GUI.
+  - Downloads platform-matched GitHub Release archives (`.tar.gz` / `.zip`), verifies `.sha256` checksums before extraction, and atomically replaces the running executable via `self-replace`.
+
+### Fixed
+- Switched `x86_64-apple-darwin` release builds from retired `macos-13` to `macos-latest` cross-compilation in `.github/workflows/release.yml`.
+
 ## [1.40.0] - 2026-11-17
 
 ### Changed

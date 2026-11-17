@@ -1,6 +1,7 @@
 //! Global keyboard shortcuts, query execution triggers, top menu/breadcrumb header, and status footer.
 
 use crate::core::sql_formatter::format_sql;
+use crate::core::updater::check_for_updates;
 use crate::gui::{ActiveRoute, RustSqlGuiApp};
 use eframe::egui::{self, Color32, Key, KeyboardShortcut, Modifiers, RichText};
 
@@ -174,6 +175,12 @@ impl RustSqlGuiApp {
                 }
             });
             ui.menu_button("Help", |ui| {
+                if ui.button("Check for Updates").clicked() {
+                    let rt = self.rt.clone();
+                    self.update_apply_message = None;
+                    self.update_modal_state = Some(rt.block_on(check_for_updates()));
+                    ui.close();
+                }
                 if ui.button("Keyboard Shortcuts").clicked() {
                     self.show_shortcuts_modal = true;
                     ui.close();

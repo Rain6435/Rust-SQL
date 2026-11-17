@@ -1,5 +1,6 @@
-//! File Save/Open/Export modals and Destructive Query Safety warning modal.
+//! File Save/Open/Export modals, Destructive Query Safety warning modal, and Software Update modal.
 
+use crate::core::updater::{perform_self_update, UpdateCheckResult};
 use crate::gui::RustSqlGuiApp;
 use eframe::egui::{self, Color32};
 
@@ -147,6 +148,47 @@ impl RustSqlGuiApp {
                             self.pending_safety_confirm = None;
                         }
                     });
+                });
+        }
+
+        if let Some(state) = self.update_modal_state.clone() {
+            egui::Window::new("Software Update")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    match &state {
+                        Ok(UpdateCheckResult::UpToDate { current }) => {
+                            ui.colored_label(
+                                Color32::GREEN,
+                                format!("Rust-SQL v{current} is already up to date."),
+                            );
+                        }
+                        Ok(UpdateCheckResult::UpdateAvailable(info)) => {
+                            ui.label(format!("New version available: {}", info.tag_name));
+                            ui.hyperlink_to("Release Notes", &info.html_url);
+                            if let Some(ref msg) = self.update_apply_message {
+                                match msg {
+                                    Ok(ok) => ui.colored_label(Color32::GREEN, ok),
+                                    Err(err) => ui.colored_label(Color32::LIGHT_RED, err),
+                                };
+                            } else if ui.button("Download & Install Update").clicked() {
+                                let rt = self.rt.clone();
+                                self.update_apply_message =
+                                    Some(rt.block_on(perform_self_update(info)));
+                            }
+                        }
+                        Err(err) => {
+                            ui.colored_label(
+                                Color32::LIGHT_RED,
+                                format!("Update check failed: {err}"),
+                            );
+                        }
+                    }
+                    ui.separator();
+                    if ui.button("Close").clicked() {
+                        self.update_modal_state = None;
+                        self.update_apply_message = None;
+                    }
                 });
         }
     }

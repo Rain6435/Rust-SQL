@@ -15,4 +15,5 @@ pub mod servers;
 pub mod sql_formatter;
 pub mod sql_identifier;
 pub mod tunnel;
+pub mod updater;
 pub mod validators;

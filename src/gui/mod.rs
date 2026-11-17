@@ -19,6 +19,7 @@ pub use settings_draft::SettingsFormDraft;
 
 use crate::core::result_ops::{ColumnStats, SortDirection};
 use crate::core::safety::QuerySafetyReport;
+use crate::core::updater::UpdateCheckResult;
 use crate::state::AppStore;
 use eframe::egui;
 use serde_json::Value;
@@ -105,6 +106,10 @@ pub struct RustSqlGuiApp {
     pub stats_modal_data: Option<Vec<ColumnStats>>,
     /// Generated Mermaid `erDiagram` displayed in the Schema ERD modal.
     pub erd_modal_diagram: Option<String>,
+    /// Result of an interactive "Check for Updates" request, when the update modal is open.
+    pub update_modal_state: Option<Result<UpdateCheckResult, String>>,
+    /// Message displayed after an in-app self-update attempt.
+    pub update_apply_message: Option<Result<String, String>>,
 }
 
 impl RustSqlGuiApp {
@@ -148,6 +153,8 @@ impl RustSqlGuiApp {
             bookmark_search_input: String::new(),
             stats_modal_data: None,
             erd_modal_diagram: None,
+            update_modal_state: None,
+            update_apply_message: None,
         }
     }
 

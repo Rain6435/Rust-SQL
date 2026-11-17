@@ -9,6 +9,7 @@ use rust_sql::core::export::export_query_result_to_string;
 use rust_sql::core::result_ops::generate_mermaid_erd;
 use rust_sql::core::safety::analyze_query_safety;
 use rust_sql::core::servers;
+use rust_sql::core::updater::run_update_cli;
 use rust_sql::gui::run_native_gui;
 use rust_sql::tui::run_tui;
 use rust_sql::web::run_web_server;
@@ -16,27 +17,30 @@ use std::collections::HashMap;
 
 /// Prints CLI usage and flags to stdout.
 fn print_help() {
-    println!("Rust-SQL v{}", env!("CARGO_PKG_VERSION"));
-    println!("A fast, lightweight SQL client with cross database and platform support.\n");
-    println!("Usage: Rust-SQL [OPTIONS]\n");
-    println!("Options:");
-    println!("  --gui                    Launch native Desktop GUI (default when DISPLAY/WAYLAND is set)");
-    println!("  --tui, --term            Launch Terminal UI");
-    println!("  --web                    Launch Web UI & IPC Server");
-    println!("  --port <PORT>            Port for Web UI server (default: 8080)");
-    println!("  -e, --exec <SQL>         Execute SQL query in headless batch mode and exit");
-    println!("  --uri <CONN_URI>         Connection URI for batch execution or ERD generation");
-    println!("  --server <NAME_OR_ID>    Saved server name or ID for batch execution");
     println!(
-        "  --format <FMT>           Output format: json, jsonl, csv, markdown, sql (default: json)"
+        "Rust-SQL v{}
+A fast, lightweight SQL client with cross database and platform support.
+
+Usage: Rust-SQL [OPTIONS]
+
+Options:
+  --gui                    Launch native Desktop GUI (default when DISPLAY/WAYLAND is set)
+  --tui, --term            Launch Terminal UI
+  --web                    Launch Web UI & IPC Server
+  --port <PORT>            Port for Web UI server (default: 8080)
+  -e, --exec <SQL>         Execute SQL query in headless batch mode and exit
+  --uri <CONN_URI>         Connection URI for batch execution or ERD generation
+  --server <NAME_OR_ID>    Saved server name or ID for batch execution
+  --format <FMT>           Output format: json, jsonl, csv, markdown, sql (default: json)
+  --read-only              Enforce Read-Only safety guardrail
+  --erd                    Generate and print Mermaid ER Diagram for the target database
+  --check-update           Check GitHub Releases for a newer version of Rust-SQL
+  --update                 Download, verify SHA-256, and self-update Rust-SQL
+  --dev                    Enable development mode and console logging
+  -v, --version            Print version and exit
+  -h, --help               Print help information",
+        env!("CARGO_PKG_VERSION")
     );
-    println!("  --read-only              Enforce Read-Only safety guardrail");
-    println!(
-        "  --erd                    Generate and print Mermaid ER Diagram for the target database"
-    );
-    println!("  --dev                    Enable development mode and console logging");
-    println!("  -v, --version            Print version and exit");
-    println!("  -h, --help               Print help information");
 }
 
 /// Resolves the target [`Server`] for headless `--exec` or `--erd` mode from `--uri`, `--server`, or an in-memory SQLite fallback.
@@ -175,6 +179,16 @@ fn main() {
         return;
     }
 
+    let want_check_update = args.iter().any(|a| a == "--check-update");
+    let want_update = args.iter().any(|a| a == "--update");
+    if want_check_update || want_update {
+        if let Err(e) = run_update_cli(want_update) {
+            eprintln!("Update error: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     let config_data = get_full_sync(false).unwrap_or_default();
     if config_data.print_version == Some(true) || args.iter().any(|a| a == "--version" || a == "-v")
     {
@@ -240,12 +254,9 @@ fn main() {
         return;
     }
 
-    let has_display = std::env::var("DISPLAY")
-        .map(|s| !s.is_empty())
-        .unwrap_or(false)
-        || std::env::var("WAYLAND_DISPLAY")
-            .map(|s| !s.is_empty())
-            .unwrap_or(false);
+    let has_display = ["DISPLAY", "WAYLAND_DISPLAY"]
+        .iter()
+        .any(|k| std::env::var(k).map(|s| !s.is_empty()).unwrap_or(false));
 
     if want_gui || has_display {
         if let Err(e) = run_native_gui() {
