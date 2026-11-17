@@ -1,7 +1,7 @@
 //! Database connection lifecycle, reconnection, and connection testing actions on [`AppStore`].
 
 use crate::adapters::{DatabaseFacade, CLIENTS};
-use crate::common::types::Server;
+use crate::common::types::{ConnectionMode, Server, EMULATED_BANNER};
 use crate::core::servers;
 use crate::state::{
     AppStore, ColumnState, ConnectionState, DatabaseState, IndexState, QueryState, RoutineState,
@@ -114,17 +114,22 @@ impl AppStore {
             self.connections.connecting = false;
             self.connections.waiting_private_key_passphrase = false;
             self.connections.error = Some(err.clone());
+            self.connections.mode = None;
             self.status.clear();
             return Err(err);
         }
 
         self.connections.connected = true;
+        self.connections.mode = self.db.connection_mode(&target_db).ok();
         self.connections.connecting = false;
         self.connections.waiting_private_key_passphrase = false;
         if !self.connections.databases.contains(&target_db) {
             self.connections.databases.push(target_db.clone());
         }
-        self.status = "Connection to database established".to_string();
+        self.status = match self.connections.mode {
+            Some(ConnectionMode::Emulated) => EMULATED_BANNER.to_string(),
+            _ => "Connection to database established".to_string(),
+        };
 
         if let Some(ref cfg) = self.config.data {
             self.queries.enabled_auto_complete = cfg.enabled_auto_complete;
@@ -171,9 +176,19 @@ impl AppStore {
 
         let mut test_facade = DatabaseFacade::new();
         let db = server.database.clone();
-        match test_facade.connect(server, db.as_deref()).await {
+        let mut res = test_facade.connect(server, db.as_deref()).await;
+        if res.is_ok() {
+            let mode = test_facade.connection_mode(db.as_deref().unwrap_or("undefined"));
+            if mode != Ok(ConnectionMode::Live) {
+                res = Err(format!(
+                    "Nothing was tested: this dialect has no live driver, so the connection \
+                     would be emulated. {EMULATED_BANNER}"
+                ));
+            }
+            let _ = test_facade.disconnect_server().await;
+        }
+        match res {
             Ok(()) => {
-                let _ = test_facade.disconnect_server().await;
                 self.connections.test_connected = true;
                 self.connections.test_connecting = false;
                 Ok(())

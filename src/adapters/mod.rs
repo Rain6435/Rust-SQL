@@ -5,18 +5,20 @@
 //! high-level session management via [`DatabaseFacade`] and [`ServerSession`].
 
 pub mod dialect_adapters;
+pub mod emulation;
 pub mod facade;
 pub mod registry;
 pub mod sqlite;
 
 pub use dialect_adapters::DialectAdapter;
+pub use emulation::{emulation_enabled, has_live_driver, set_emulation_enabled};
 pub use facade::*;
 pub use registry::*;
 pub use sqlite::{execute_sqlite_statement, map_sqlite_err, SqliteAdapter, SqliteCancellableQuery};
 
 use crate::common::types::{
-    AdapterVersion, DatabaseFilter, ListRoutineResult, ListTableColumnsResult, ListTableResult,
-    ListViewResult, QueryRowResult, SchemaFilter, Server, TableKeysResult,
+    AdapterVersion, ConnectionMode, DatabaseFilter, ListRoutineResult, ListTableColumnsResult,
+    ListTableResult, ListViewResult, QueryRowResult, SchemaFilter, Server, TableKeysResult,
 };
 use crate::core::errors::DbCoreError;
 use async_trait::async_trait;
@@ -40,6 +42,8 @@ pub trait DatabaseAdapter: Send + Sync {
     async fn disconnect(&mut self) -> Result<(), DbCoreError>;
     /// Returns the server's [`AdapterVersion`] discovered during [`connect`](Self::connect).
     fn get_version(&self) -> AdapterVersion;
+    /// Reports whether results come from the real server or from the in-memory emulator.
+    fn connection_mode(&self) -> ConnectionMode;
     /// Quotes a SQL identifier (`"ident"`, `` `ident` ``, or `[ident]`) for this adapter's dialect.
     fn wrap_identifier(&self, value: &str) -> String;
 
@@ -183,6 +187,9 @@ pub fn adapter_factory(
 
     match adapter_key {
         "sqlite" => Ok(Box::new(SqliteAdapter::new(server, database))),
-        _ => Ok(Box::new(DialectAdapter::new(adapter_key, server, database))),
+        _ => Ok(Box::new(
+            DialectAdapter::new(adapter_key, server, database)
+                .with_emulation_allowed(emulation_enabled()),
+        )),
     }
 }

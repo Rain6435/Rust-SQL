@@ -142,6 +142,10 @@ pub fn get_full_sync(force_clean_cache: bool) -> Result<Config, String> {
             .base
             .csv_delimiter
             .unwrap_or_else(|| ",".to_string()),
+        emulate_unsupported_dialects: app_config
+            .base
+            .emulate_unsupported_dialects
+            .unwrap_or(false),
         connections_as_list: app_config.base.connections_as_list.unwrap_or(false),
         custom_font: app_config
             .base

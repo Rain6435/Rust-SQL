@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Emulated data is no longer presented as real results.**
+  - PostgreSQL and Redshift connection failures (wrong password, unreachable host, missing
+    database) now return an error naming the host, port, and database, never the password.
+    Previously they silently fell back to an in-memory emulator with fake `roles`/`users` tables.
+  - Live PostgreSQL and Redshift sessions now run queries and metadata (databases, schemas,
+    tables, views, routines, columns, triggers, indexes, keys) against the real server.
+    Previously only the database list came from the server.
+  - MySQL, MariaDB, SQL Server, and Cassandra have no live driver. Connecting to them now fails
+    with a "not implemented" error unless emulation is enabled with `--emulate` or
+    `"emulateUnsupportedDialects": true`.
+  - Added `ConnectionMode` (`Live` / `Emulated`), exposed through `DatabaseAdapter::connection_mode`,
+    `DatabaseConnection::connection_mode`, `DatabaseFacade::connection_mode`, the `DB_CONNECT`
+    IPC response, and the new `DB_GET_CONNECTION_MODE` IPC event.
+  - The GUI, TUI, web UI, and CLI show "EMULATED — results are not from your server." whenever a
+    connection is emulated. "Test connection" reports that nothing was tested for emulated dialects.
+  - PostgreSQL connections with SSL enabled are refused instead of being sent unencrypted
+    (TLS is not implemented yet).
+
+### Removed
+- The `invalid.` / `255.255.255.255` hostname test hook, the simulated-latency sleep in the
+  emulator, the fabricated PostgreSQL `EXPLAIN` plan, and placeholder `let _ = (...)` blocks.
+- `try_connect_live_postgres` (replaced by `connect_live_postgres`, which returns an error
+  instead of `None`).
+
 ## [1.41.1] - 2026-11-17
 
 ### Fixed

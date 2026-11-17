@@ -74,6 +74,9 @@ pub struct BaseConfig {
     /// Custom UI font family name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_font: Option<String>,
+    /// Opt-in: emulate dialects that have no live driver (results are not from a real server).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emulate_unsupported_dialects: Option<bool>,
 }
 
 /// On-disk schema of `rust-sql.json`, containing the server list and optional user preferences.
@@ -126,6 +129,9 @@ pub struct Config {
     pub disabled_open_animation: bool,
     /// Active CSV delimiter character/string.
     pub csv_delimiter: String,
+    /// Whether dialects without a live driver may be emulated (off unless explicitly enabled).
+    #[serde(default)]
+    pub emulate_unsupported_dialects: bool,
     /// Whether servers are displayed in list mode.
     pub connections_as_list: bool,
     /// Active custom font family.
@@ -169,6 +175,7 @@ impl Default for Config {
             enabled_dark_theme: false,
             disabled_open_animation: false,
             csv_delimiter: ",".to_string(),
+            emulate_unsupported_dialects: false,
             connections_as_list: false,
             custom_font: "Lato".to_string(),
             name: "Rust-SQL".to_string(),

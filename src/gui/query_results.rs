@@ -1,5 +1,6 @@
 //! Query result table rendering, sorting, filtering, column statistics trigger, and export buttons.
 
+use crate::common::types::{ConnectionMode, EMULATED_BANNER};
 use crate::common::utils::value_to_string;
 use crate::core::result_ops::{
     compute_column_stats, filter_result_rows, sort_result_rows, SortDirection,
@@ -10,9 +11,25 @@ use eframe::egui::{self, Color32, RichText, Stroke};
 use egui_extras::{Column, TableBuilder};
 use serde_json::Value;
 
+/// Draws the red "EMULATED" warning shown above every result set of an emulated session.
+pub(crate) fn render_emulated_banner(ui: &mut egui::Ui) {
+    egui::Frame::group(ui.style())
+        .fill(Color32::from_rgb(185, 28, 28))
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new(EMULATED_BANNER)
+                    .strong()
+                    .color(Color32::WHITE),
+            );
+        });
+}
+
 impl RustSqlGuiApp {
     /// Renders execution status, errors, or result sets for `query_tab`.
     pub(crate) fn render_query_results(&mut self, ui: &mut egui::Ui, query_tab: &QueryTab) {
+        if self.store.connections.mode == Some(ConnectionMode::Emulated) {
+            render_emulated_banner(ui);
+        }
         if query_tab.is_executing {
             ui.centered_and_justified(|ui| {
                 ui.label(RichText::new("⏳ Executing query...").size(16.0));

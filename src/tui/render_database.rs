@@ -1,10 +1,12 @@
 //! TUI rendering for the connected database workspace (`TableList`, `QueryArea`, `QueryResults`).
 
+use crate::common::types::{ConnectionMode, EMULATED_BANNER};
 use crate::common::utils::value_to_string;
 use crate::tui::{DatabaseFocus, TuiApp};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
+    text::{Line, Span},
     widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table},
 };
 use serde_json::Value;
@@ -18,6 +20,7 @@ impl TuiApp {
         footer: Rect,
         database: &str,
     ) {
+        let emulated = self.store.connections.mode == Some(ConnectionMode::Emulated);
         let h_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(30), Constraint::Min(20)])
@@ -64,7 +67,11 @@ impl TuiApp {
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(tbl_border_style)
-                .title(format!(" Tables ({database}) ")),
+                .title(if emulated {
+                    format!(" Tables ({database}) [EMULATED] ")
+                } else {
+                    format!(" Tables ({database}) ")
+                }),
         );
         f.render_widget(tbl_list, h_chunks[0]);
 
@@ -91,10 +98,21 @@ impl TuiApp {
         } else {
             Style::default()
         };
+        let results_title = if emulated {
+            Line::from(Span::styled(
+                format!(" {EMULATED_BANNER} "),
+                Style::default()
+                    .fg(Color::White)
+                    .bg(Color::Red)
+                    .add_modifier(Modifier::BOLD),
+            ))
+        } else {
+            Line::from(" Query Results ")
+        };
         let results_block = Block::default()
             .borders(Borders::ALL)
             .border_style(res_border_style)
-            .title(" Query Results ");
+            .title(results_title);
 
         if let Some(q) = self.store.current_query() {
             if let Some(ref err) = q.error {
@@ -155,5 +173,31 @@ impl TuiApp {
             Paragraph::new(shortcut_text).style(Style::default().fg(Color::Cyan)),
             footer,
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::common::types::{ConnectionMode, EMULATED_BANNER};
+    use crate::tui::TuiApp;
+    use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+
+    fn rendered_text(mode: Option<ConnectionMode>) -> String {
+        let mut app = TuiApp::new();
+        app.store.connections.mode = mode;
+        let mut terminal = Terminal::new(TestBackend::new(120, 20)).expect("terminal");
+        terminal
+            .draw(|f| {
+                app.render_database(f, Rect::new(0, 0, 120, 19), Rect::new(0, 19, 120, 1), "db")
+            })
+            .expect("draw");
+        let buffer = terminal.backend().buffer().clone();
+        buffer.content().iter().map(|c| c.symbol()).collect()
+    }
+
+    #[test]
+    fn emulated_session_shows_banner_over_results() {
+        assert!(rendered_text(Some(ConnectionMode::Emulated)).contains(EMULATED_BANNER));
+        assert!(!rendered_text(Some(ConnectionMode::Live)).contains("EMULATED"));
     }
 }

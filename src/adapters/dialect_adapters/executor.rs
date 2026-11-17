@@ -6,12 +6,13 @@ use crate::core::errors::{CanceledByUserError, DbCoreError};
 use crate::core::sql_identifier::identify;
 use async_trait::async_trait;
 use rusqlite::Connection;
-use serde_json::{Map, Value};
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
-/// Cancellable query handle for [`super::DialectAdapter`].
+/// Cancellable query handle for an emulated [`super::DialectAdapter`] session.
+///
+/// Emulated queries finish immediately. Cancellation is honored if requested before execution.
 pub struct DialectCancellableQuery {
     /// Target database adapter key.
     pub adapter_key: String,
@@ -28,21 +29,6 @@ pub struct DialectCancellableQuery {
 #[async_trait]
 impl CancellableQuery for DialectCancellableQuery {
     async fn execute(&self) -> Result<Vec<QueryRowResult>, DbCoreError> {
-        let lower = self.query_text.to_lowercase();
-        let is_sleep = lower.contains("pg_sleep")
-            || lower.contains("sleep(")
-            || lower.contains("waitfor delay")
-            || (lower.contains("information_schema.columns") && self.query_text.len() > 2000);
-
-        if is_sleep {
-            for _ in 0..100 {
-                if self.canceled.load(Ordering::SeqCst) {
-                    return Err(DbCoreError::CanceledByUser(CanceledByUserError::new()));
-                }
-                tokio::time::sleep(Duration::from_millis(60)).await;
-            }
-        }
-
         if self.canceled.load(Ordering::SeqCst) {
             return Err(DbCoreError::CanceledByUser(CanceledByUserError::new()));
         }
@@ -61,7 +47,9 @@ impl CancellableQuery for DialectCancellableQuery {
     }
 }
 
-/// Executes `query_text` using the dialect-specific semantics of `adapter_key`.
+/// Executes `query_text` on the in-memory emulator, imitating the result shapes of `adapter_key`.
+///
+/// Only called for opted-in emulated sessions. Results are not from any real server.
 pub fn execute_dialect_query_internal(
     adapter_key: &str,
     emulated_conn: &Arc<Mutex<Connection>>,
@@ -172,26 +160,6 @@ pub fn execute_dialect_query_internal(
                 fields: Vec::new(),
                 row_count: None,
                 affected_rows: Some(0),
-            });
-            continue;
-        }
-
-        if cmd == "EXPLAIN" && matches!(adapter_key, "postgresql" | "redshift") {
-            let mut row = Map::new();
-            row.insert(
-                "QUERY PLAN".to_string(),
-                Value::String(
-                    "Seq Scan on users  (cost=0.00..12.10 rows=210 width=148)".to_string(),
-                ),
-            );
-            results.push(QueryRowResult {
-                command: "EXPLAIN".to_string(),
-                rows: vec![row],
-                fields: vec![FieldInfo {
-                    name: "QUERY PLAN".to_string(),
-                }],
-                row_count: None,
-                affected_rows: None,
             });
             continue;
         }

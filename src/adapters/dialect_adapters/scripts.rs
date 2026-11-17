@@ -1,7 +1,42 @@
 //! Dialect-specific DDL script generators for tables, views, and stored routines.
 
+use crate::adapters::dialect_adapters::seed::Backend;
+use crate::adapters::dialect_adapters::DialectAdapter;
 use crate::common::utils::append_semi_colon;
 use crate::core::errors::DbCoreError;
+
+/// Kind of `CREATE` script requested from a [`DialectAdapter`].
+pub(crate) enum ScriptKind {
+    /// `CREATE TABLE`.
+    Table,
+    /// `CREATE VIEW`.
+    View,
+    /// `CREATE FUNCTION` / `CREATE PROCEDURE`.
+    Routine,
+}
+
+impl DialectAdapter {
+    /// Returns the emulator's `CREATE` script, or an explicit error on a live connection.
+    pub(crate) fn create_script(
+        &self,
+        kind: ScriptKind,
+        name: &str,
+    ) -> Result<Vec<String>, DbCoreError> {
+        let key = self.adapter_key.as_str();
+        match (self.backend()?, kind) {
+            (Backend::Live(_), _) => Err(self.live_unsupported("Generating CREATE scripts")),
+            (Backend::Emulated(_), ScriptKind::Table) => {
+                get_table_create_script_for_adapter(key, name)
+            }
+            (Backend::Emulated(_), ScriptKind::View) => {
+                get_view_create_script_for_adapter(key, name)
+            }
+            (Backend::Emulated(_), ScriptKind::Routine) => {
+                get_routine_create_script_for_adapter(key, name)
+            }
+        }
+    }
+}
 
 /// Generates the dialect-specific `CREATE TABLE` DDL script for `table`.
 pub fn get_table_create_script_for_adapter(

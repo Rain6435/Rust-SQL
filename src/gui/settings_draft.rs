@@ -91,6 +91,7 @@ impl SettingsFormDraft {
                 path: self.log_path.trim().to_string(),
                 level: self.log_level.clone(),
             }),
+            emulate_unsupported_dialects: None,
         }
     }
 }

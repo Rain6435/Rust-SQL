@@ -8,8 +8,8 @@ use crate::adapters::{
     build_query_select_top, wrap_identifier_for_adapter, CancellableQuery, DatabaseAdapter,
 };
 use crate::common::types::{
-    AdapterVersion, DatabaseFilter, ListRoutineResult, ListTableColumnsResult, ListTableResult,
-    ListViewResult, QueryRowResult, SchemaFilter, Server, TableKeysResult,
+    AdapterVersion, ConnectionMode, DatabaseFilter, ListRoutineResult, ListTableColumnsResult,
+    ListTableResult, ListViewResult, QueryRowResult, SchemaFilter, Server, TableKeysResult,
 };
 use crate::common::utils::append_semi_colon;
 use crate::core::errors::DbCoreError;
@@ -98,6 +98,10 @@ impl DatabaseAdapter for SqliteAdapter {
 
     fn get_version(&self) -> AdapterVersion {
         self.version.clone()
+    }
+
+    fn connection_mode(&self) -> ConnectionMode {
+        ConnectionMode::Live
     }
 
     fn wrap_identifier(&self, value: &str) -> String {

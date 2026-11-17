@@ -1,17 +1,27 @@
-//! Multi-dialect database adapter supporting PostgreSQL, Redshift, MySQL, MariaDB,
-//! Microsoft SQL Server, and Apache Cassandra.
+//! Multi-dialect database adapter.
+//!
+//! PostgreSQL and Redshift connect live through `tokio-postgres`. MySQL, MariaDB, SQL Server,
+//! and Cassandra have no live driver yet: they refuse to connect unless the user opts in to the
+//! in-memory emulator, and an emulated session reports [`ConnectionMode::Emulated`].
 
 pub mod executor;
+pub mod live_pg;
+pub mod live_pg_metadata;
+pub mod live_pg_query;
 pub mod metadata;
 pub mod scripts;
 pub mod seed;
 pub mod sql_templates;
 
 pub use executor::{execute_dialect_query_internal, DialectCancellableQuery};
+pub use live_pg::{connect_live_postgres, LivePostgres};
+pub use live_pg_metadata::*;
+pub use live_pg_query::{execute_live_query, PgCancellableQuery};
 pub use metadata::*;
 pub use scripts::*;
 pub use seed::{
-    default_version_for_adapter, seed_default_dialect_schema, try_connect_live_postgres,
+    default_version_for_adapter, list_databases_for_emulator, seed_default_dialect_schema,
+    DialectAdapter,
 };
 pub use sql_templates::{map_legacy_cassandra_data_type, mysql_sql, pg_sql, sqlserver_sql};
 
@@ -19,36 +29,15 @@ use crate::adapters::{
     build_query_select_top, wrap_identifier_for_adapter, CancellableQuery, DatabaseAdapter,
 };
 use crate::common::types::{
-    AdapterVersion, DatabaseFilter, ListRoutineResult, ListTableColumnsResult, ListTableResult,
-    ListViewResult, QueryRowResult, SchemaFilter, Server, TableKeysResult,
+    AdapterVersion, ConnectionMode, DatabaseFilter, ListRoutineResult, ListTableColumnsResult,
+    ListTableResult, ListViewResult, QueryRowResult, SchemaFilter, TableKeysResult,
 };
 use crate::core::errors::DbCoreError;
-use crate::core::filters::filter_database_name;
 use async_trait::async_trait;
-use rusqlite::Connection;
+use scripts::ScriptKind;
+use seed::Backend;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
-
-/// Multi-dialect database adapter supporting live network connections (e.g., `tokio-postgres`)
-/// as well as deterministic in-memory dialect execution for testing and offline development.
-pub struct DialectAdapter {
-    /// Adapter key (`postgresql`, `redshift`, `mysql`, `mariadb`, `sqlserver`, `cassandra`).
-    pub adapter_key: String,
-    /// Server connection configuration.
-    pub server: Server,
-    /// Target database or keyspace name.
-    pub database: String,
-    /// Default schema name (`"public"` for PostgreSQL/Redshift, `"dbo"` for SQL Server).
-    pub default_schema: String,
-    /// Discovered or default server version metadata.
-    pub version: AdapterVersion,
-    /// Optional live `tokio_postgres::Client` connection.
-    pub pg_client: Option<Arc<tokio_postgres::Client>>,
-    /// In-memory SQLite engine backing offline/emulated dialect queries.
-    pub emulated_conn: Arc<Mutex<Connection>>,
-    /// Tracked database list for the server session.
-    pub extra_databases: Arc<Mutex<Vec<String>>>,
-}
+use std::sync::Arc;
 
 #[async_trait]
 impl DatabaseAdapter for DialectAdapter {
@@ -58,11 +47,20 @@ impl DatabaseAdapter for DialectAdapter {
 
     async fn disconnect(&mut self) -> Result<(), DbCoreError> {
         self.pg_client = None;
+        self.emulated_conn = None;
         Ok(())
     }
 
     fn get_version(&self) -> AdapterVersion {
         self.version.clone()
+    }
+
+    fn connection_mode(&self) -> ConnectionMode {
+        if self.emulated_conn.is_some() {
+            ConnectionMode::Emulated
+        } else {
+            ConnectionMode::Live
+        }
     }
 
     fn wrap_identifier(&self, value: &str) -> String {
@@ -73,126 +71,148 @@ impl DatabaseAdapter for DialectAdapter {
         &self,
         filter: Option<&DatabaseFilter>,
     ) -> Result<Vec<String>, DbCoreError> {
-        if let Some(ref client) = self.pg_client {
-            if let Ok(rows) = client
-                .query(&pg_sql::list_databases(filter), &[&false])
-                .await
-            {
-                return Ok(rows.into_iter().filter_map(|r| r.try_get(0).ok()).collect());
-            }
+        if let Backend::Live(client) = self.backend()? {
+            return live_list_databases(client, filter).await;
         }
-        let dbs = self
-            .extra_databases
-            .lock()
-            .map(|g| g.clone())
-            .unwrap_or_else(|_| vec!["rust_sql".to_string()]);
-        let mut out: Vec<String> = dbs
-            .into_iter()
-            .filter(|name| filter_database_name(name, filter))
-            .collect();
-        out.sort();
-        out.dedup();
-        Ok(out)
+        list_databases_for_emulator(&self.extra_databases, filter)
     }
 
     async fn list_schemas(
         &self,
         filter: Option<&SchemaFilter>,
     ) -> Result<Vec<String>, DbCoreError> {
-        list_schemas_for_adapter(&self.adapter_key, &self.default_schema, filter)
+        match self.backend()? {
+            Backend::Live(c) => live_list_schemas(c, filter).await,
+            Backend::Emulated(_) => {
+                list_schemas_for_adapter(&self.adapter_key, &self.default_schema, filter)
+            }
+        }
     }
 
     async fn list_tables(
         &self,
         filter: Option<&SchemaFilter>,
     ) -> Result<Vec<ListTableResult>, DbCoreError> {
-        list_tables_for_adapter(
-            &self.adapter_key,
-            &self.default_schema,
-            &self.emulated_conn,
-            filter,
-        )
+        match self.backend()? {
+            Backend::Live(c) => live_list_tables(c, filter).await,
+            Backend::Emulated(e) => {
+                list_tables_for_adapter(&self.adapter_key, &self.default_schema, e, filter)
+            }
+        }
     }
 
     async fn list_views(
         &self,
         filter: Option<&SchemaFilter>,
     ) -> Result<Vec<ListViewResult>, DbCoreError> {
-        list_views_for_adapter(
-            &self.adapter_key,
-            &self.default_schema,
-            &self.emulated_conn,
-            filter,
-        )
+        match self.backend()? {
+            Backend::Live(c) => live_list_views(c, filter).await,
+            Backend::Emulated(e) => {
+                list_views_for_adapter(&self.adapter_key, &self.default_schema, e, filter)
+            }
+        }
     }
 
     async fn list_routines(
         &self,
         filter: Option<&SchemaFilter>,
     ) -> Result<Vec<ListRoutineResult>, DbCoreError> {
-        list_routines_for_adapter(&self.adapter_key, &self.default_schema, filter)
+        match self.backend()? {
+            Backend::Live(c) => live_list_routines(c, filter).await,
+            Backend::Emulated(_) => {
+                list_routines_for_adapter(&self.adapter_key, &self.default_schema, filter)
+            }
+        }
     }
 
     async fn list_table_columns(
         &self,
         table: &str,
-        _schema: Option<&str>,
+        schema: Option<&str>,
     ) -> Result<Vec<ListTableColumnsResult>, DbCoreError> {
-        list_columns_for_adapter(&self.adapter_key, &self.emulated_conn, table)
+        match self.backend()? {
+            Backend::Live(c) => live_list_columns(c, self.schema_or_default(schema), table).await,
+            Backend::Emulated(e) => list_columns_for_adapter(&self.adapter_key, e, table),
+        }
     }
 
     async fn list_table_triggers(
         &self,
         table: &str,
-        _schema: Option<&str>,
+        schema: Option<&str>,
     ) -> Result<Vec<String>, DbCoreError> {
-        list_triggers_for_adapter(&self.adapter_key, table)
+        match self.backend()? {
+            Backend::Live(c) => live_list_triggers(c, self.schema_or_default(schema), table).await,
+            Backend::Emulated(_) => list_triggers_for_adapter(&self.adapter_key, table),
+        }
     }
 
     async fn list_table_indexes(
         &self,
         table: &str,
-        _schema: Option<&str>,
+        schema: Option<&str>,
     ) -> Result<Vec<String>, DbCoreError> {
-        list_indexes_for_adapter(&self.adapter_key, table)
+        match self.backend()? {
+            Backend::Live(c) => live_list_indexes(c, self.schema_or_default(schema), table).await,
+            Backend::Emulated(_) => list_indexes_for_adapter(&self.adapter_key, table),
+        }
     }
 
     async fn get_table_references(
         &self,
         table: &str,
-        _schema: Option<&str>,
+        schema: Option<&str>,
     ) -> Result<Vec<String>, DbCoreError> {
-        get_references_for_adapter(&self.adapter_key, table)
+        match self.backend()? {
+            Backend::Live(c) => {
+                live_table_references(c, self.schema_or_default(schema), table).await
+            }
+            Backend::Emulated(_) => get_references_for_adapter(&self.adapter_key, table),
+        }
     }
 
     async fn get_table_keys(
         &self,
         table: &str,
-        _schema: Option<&str>,
+        schema: Option<&str>,
     ) -> Result<Vec<TableKeysResult>, DbCoreError> {
-        get_keys_for_adapter(&self.adapter_key, table)
+        match self.backend()? {
+            Backend::Live(c) => live_table_keys(c, self.schema_or_default(schema), table).await,
+            Backend::Emulated(_) => get_keys_for_adapter(&self.adapter_key, table),
+        }
     }
 
     fn query(&self, query_text: &str) -> Result<Arc<dyn CancellableQuery>, DbCoreError> {
         if self.adapter_key == "cassandra" {
             return Err(DbCoreError::CassandraCancelUnsupported);
         }
-        Ok(Arc::new(DialectCancellableQuery {
-            adapter_key: self.adapter_key.clone(),
-            emulated_conn: self.emulated_conn.clone(),
-            extra_databases: self.extra_databases.clone(),
-            query_text: query_text.to_string(),
-            canceled: Arc::new(AtomicBool::new(false)),
-        }))
+        let canceled = Arc::new(AtomicBool::new(false));
+        Ok(match self.backend()? {
+            Backend::Live(client) => Arc::new(PgCancellableQuery {
+                client: client.clone(),
+                query_text: query_text.to_string(),
+                canceled,
+            }),
+            Backend::Emulated(e) => Arc::new(DialectCancellableQuery {
+                adapter_key: self.adapter_key.clone(),
+                emulated_conn: e.clone(),
+                extra_databases: self.extra_databases.clone(),
+                query_text: query_text.to_string(),
+                canceled,
+            }),
+        })
     }
 
     async fn execute_query(&self, query_text: &str) -> Result<Vec<QueryRowResult>, DbCoreError> {
-        execute_dialect_query_internal(
-            &self.adapter_key,
-            &self.emulated_conn,
-            &self.extra_databases,
-            query_text,
-        )
+        match self.backend()? {
+            Backend::Live(c) => execute_live_query(c, query_text).await,
+            Backend::Emulated(e) => execute_dialect_query_internal(
+                &self.adapter_key,
+                e,
+                &self.extra_databases,
+                query_text,
+            ),
+        }
     }
 
     async fn get_query_select_top(
@@ -214,7 +234,7 @@ impl DatabaseAdapter for DialectAdapter {
         table: &str,
         _schema: Option<&str>,
     ) -> Result<Vec<String>, DbCoreError> {
-        get_table_create_script_for_adapter(&self.adapter_key, table)
+        self.create_script(ScriptKind::Table, table)
     }
 
     async fn get_view_create_script(
@@ -222,7 +242,7 @@ impl DatabaseAdapter for DialectAdapter {
         view: &str,
         _schema: Option<&str>,
     ) -> Result<Vec<String>, DbCoreError> {
-        get_view_create_script_for_adapter(&self.adapter_key, view)
+        self.create_script(ScriptKind::View, view)
     }
 
     async fn get_routine_create_script(
@@ -231,13 +251,15 @@ impl DatabaseAdapter for DialectAdapter {
         _routine_type: &str,
         _schema: Option<&str>,
     ) -> Result<Vec<String>, DbCoreError> {
-        get_routine_create_script_for_adapter(&self.adapter_key, routine)
+        self.create_script(ScriptKind::Routine, routine)
     }
 
     async fn truncate_all_tables(&self, _schema: Option<&str>) -> Result<(), DbCoreError> {
+        let Backend::Emulated(emulated) = self.backend()? else {
+            return Err(self.live_unsupported("Truncating all tables"));
+        };
         let tables = self.list_tables(None).await?;
-        let conn = self
-            .emulated_conn
+        let conn = emulated
             .lock()
             .map_err(|e| DbCoreError::Message(e.to_string()))?;
         for t in tables {

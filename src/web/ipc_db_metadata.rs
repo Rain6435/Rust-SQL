@@ -1,9 +1,21 @@
 //! Web IPC handlers for database connection and schema/table metadata discovery events.
 
+use crate::adapters::DatabaseFacade;
 use crate::common::event::*;
-use crate::common::types::{DatabaseFilter, SchemaFilter, Server};
+use crate::common::types::{ConnectionMode, DatabaseFilter, SchemaFilter, Server, EMULATED_BANNER};
 use crate::web::{str_arg, IpcResponse, WebIpcState};
-use serde_json::Value;
+use serde_json::{json, Value};
+
+/// Builds the `{ mode, banner }` payload so web clients can show the EMULATED warning.
+fn mode_response(db: &DatabaseFacade, database: &str) -> IpcResponse {
+    match db.connection_mode(database) {
+        Ok(mode) => IpcResponse::success(json!({
+            "mode": mode,
+            "banner": (mode == ConnectionMode::Emulated).then_some(EMULATED_BANNER),
+        })),
+        Err(e) => IpcResponse::err(e),
+    }
+}
 
 /// Handles database connection and metadata listing IPC events, returning `None` if `event` is unhandled.
 pub async fn handle_db_metadata_ipc(
@@ -27,9 +39,14 @@ pub async fn handle_db_metadata_ipc(
             let database = str_arg(args, 1);
             let mut db = state.db.lock().await;
             match db.connect(srv, database.as_deref()).await {
-                Ok(()) => IpcResponse::success(Value::Null),
+                Ok(()) => mode_response(&db, database.as_deref().unwrap_or("undefined")),
                 Err(e) => IpcResponse::err(e),
             }
+        }
+        DB_GET_CONNECTION_MODE => {
+            let database = str_arg(args, 0).unwrap_or_default();
+            let db = state.db.lock().await;
+            mode_response(&db, &database)
         }
         DB_DISCONNECT_DATABASE => {
             let database = str_arg(args, 0);

@@ -19,6 +19,7 @@ You can also override the configuration directory via the `$RUST_SQL_HOME` envir
   "csvDelimiter": ",",
   "connectionsAsList": false,
   "customFont": "Lato",
+  "emulateUnsupportedDialects": false,
   "log": {
     "console": true,
     "file": true,
@@ -47,3 +48,11 @@ You can also override the configuration directory via the `$RUST_SQL_HOME` envir
   ]
 }
 ```
+
+### `emulateUnsupportedDialects`
+
+Default `false`. MySQL, MariaDB, SQL Server, and Cassandra have no live driver yet, so connecting
+to them fails with a "not implemented" error. Setting this to `true` (or starting Rust-SQL with
+`--emulate`) lets those dialects run on an in-memory emulator instead. Emulated results are **not
+from your server**, and every front end labels them "EMULATED — results are not from your
+server." This setting has no effect on PostgreSQL, Redshift, or SQLite, which always connect live.

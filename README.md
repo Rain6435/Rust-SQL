@@ -11,13 +11,43 @@ A fast, lightweight, cross-database, and cross-platform SQL client written in Ru
 
 ## Supported Databases
 
-- **PostgreSQL** (`postgresql`, default port `5432`)
-- **Amazon Redshift** (`redshift`, default port `5432`)
-- **MySQL** (`mysql`, default port `3306`)
-- **MariaDB** (`mariadb`, default port `3306`)
-- **Microsoft SQL Server** (`sqlserver`, default port `1433`)
-- **SQLite** (`sqlite`, file or `:memory:`)
-- **Apache Cassandra** (`cassandra`, default port `9042`)
+Only three dialects connect to a real server today. The other four have no live driver yet.
+
+| Dialect | Key | Status |
+| --- | --- | --- |
+| **PostgreSQL** | `postgresql` (default port `5432`) | **Live** via `tokio-postgres` |
+| **Amazon Redshift** | `redshift` (default port `5432`) | **Live** via `tokio-postgres` (PostgreSQL wire protocol) |
+| **SQLite** | `sqlite` (file or `:memory:`) | **Live** via `rusqlite` |
+| **MySQL** | `mysql` (default port `3306`) | **Not implemented.** Emulation only, opt-in |
+| **MariaDB** | `mariadb` (default port `3306`) | **Not implemented.** Emulation only, opt-in |
+| **Microsoft SQL Server** | `sqlserver` (default port `1433`) | **Not implemented.** Emulation only, opt-in |
+| **Apache Cassandra** | `cassandra` (default port `9042`) | **Not implemented.** Emulation only, opt-in |
+
+Known limits of the live PostgreSQL/Redshift driver:
+
+- TLS is not implemented yet. A connection with SSL enabled is refused rather than sent unencrypted.
+- Query results are returned as text exactly as the server renders them (or `NULL`).
+- `CREATE TABLE/VIEW/ROUTINE` script generation and "truncate all tables" return an explicit
+  "not implemented for live connections" error.
+
+A failed PostgreSQL or Redshift connection (wrong password, unreachable host, missing database)
+is always reported as an error naming the host, port, and database. It never falls back to
+emulated data, and the password is never included in the message.
+
+### Emulation (opt-in only)
+
+Connecting to MySQL, MariaDB, SQL Server, or Cassandra fails with a "live connections for this
+dialect are not implemented" error unless you explicitly opt in to the in-memory emulator:
+
+- start Rust-SQL with `--emulate`, or
+- set `"emulateUnsupportedDialects": true` in the [configuration file](docs/app/configuration-file.md).
+
+The emulator runs your SQL against a seeded in-memory SQLite database (`roles`, `users`,
+`email_view`). **Its results are not from your server.** While a connection is emulated, every
+front end shows **"EMULATED — results are not from your server."**: the desktop GUI above each
+result set and in the footer, the TUI in the results title and status bar, the web UI in a red
+banner and above each result set, and the CLI on stderr. The opt-in never affects PostgreSQL,
+Redshift, or SQLite, which always connect live.
 
 ---
 
@@ -39,7 +69,7 @@ A fast, lightweight, cross-database, and cross-platform SQL client written in Ru
 6. **Multi-Format Data Export ([src/core/export.rs](src/core/export.rs))**:
    - Export query results to **CSV**, **JSON**, **JSON Lines (`JSONL` / `NDJSON`)**, **GitHub-Flavored Markdown Tables (`MARKDOWN`)**, and **SQL `INSERT INTO` Statements (`SQL`)** (to file or clipboard).
 7. **Headless CLI Batch Execution ([src/main.rs](src/main.rs))**:
-   - Run queries directly from CI/CD scripts or the terminal via `-e / --exec "<SQL>"`, `--uri <CONN_URI>`, `--server <NAME_OR_ID>`, `--format <json|jsonl|csv|markdown|sql>`, `--read-only`, and `--erd`.
+   - Run queries directly from CI/CD scripts or the terminal via `-e / --exec "<SQL>"`, `--uri <CONN_URI>`, `--server <NAME_OR_ID>`, `--format <json|jsonl|csv|markdown|sql>`, `--read-only`, `--erd`, and `--emulate` (see [Emulation](#emulation-opt-in-only)).
 
 ---
 

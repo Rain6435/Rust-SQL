@@ -1,7 +1,6 @@
-//! Dialect metadata introspection helpers for schemas, tables, views, routines, columns,
+//! Emulator-only metadata helpers for schemas, tables, views, routines, columns,
 //! triggers, indexes, foreign key references, and primary/foreign key constraints.
 
-use crate::adapters::dialect_adapters::sql_templates::{mysql_sql, pg_sql, sqlserver_sql};
 use crate::common::types::{
     ListRoutineResult, ListTableColumnsResult, ListTableResult, ListViewResult, SchemaFilter,
     TableKeysResult,
@@ -20,10 +19,6 @@ pub fn list_schemas_for_adapter(
     if !matches!(adapter_key, "postgresql" | "redshift" | "sqlserver") {
         return Ok(Vec::new());
     }
-    let _ = (
-        pg_sql::list_schemas(filter),
-        sqlserver_sql::list_schemas(filter),
-    );
     let mut out: Vec<String> = [default_schema, "dummy_schema", "information_schema"]
         .into_iter()
         .filter(|s| filter_schema_name(Some(s), filter))
@@ -68,7 +63,6 @@ pub fn list_tables_for_adapter(
     emulated_conn: &Arc<Mutex<Connection>>,
     filter: Option<&SchemaFilter>,
 ) -> Result<Vec<ListTableResult>, DbCoreError> {
-    let _ = (pg_sql::list_tables(filter), mysql_sql::LIST_TABLES);
     let schema = schema_for_adapter(adapter_key, default_schema);
     if !filter_schema_name(schema.as_deref(), filter) {
         return Ok(Vec::new());
@@ -92,7 +86,6 @@ pub fn list_views_for_adapter(
     if adapter_key == "cassandra" {
         return Ok(Vec::new());
     }
-    let _ = (pg_sql::list_views(filter), mysql_sql::LIST_VIEWS);
     let schema = schema_for_adapter(adapter_key, default_schema);
     if !filter_schema_name(schema.as_deref(), filter) {
         return Ok(Vec::new());
@@ -110,9 +103,8 @@ pub fn list_views_for_adapter(
 pub fn list_routines_for_adapter(
     adapter_key: &str,
     default_schema: &str,
-    filter: Option<&SchemaFilter>,
+    _filter: Option<&SchemaFilter>,
 ) -> Result<Vec<ListRoutineResult>, DbCoreError> {
-    let _ = (pg_sql::list_routines(filter), mysql_sql::LIST_ROUTINES);
     let s = Some(default_schema.to_string());
     let item = |schema: Option<String>, name: &str, rtype: &str| ListRoutineResult {
         schema,
@@ -137,7 +129,6 @@ pub fn list_columns_for_adapter(
     emulated_conn: &Arc<Mutex<Connection>>,
     table: &str,
 ) -> Result<Vec<ListTableColumnsResult>, DbCoreError> {
-    let _ = (pg_sql::LIST_TABLE_COLUMNS, mysql_sql::LIST_TABLE_COLUMNS);
     if table == "users" {
         let cols: &[(&str, &str)] = match adapter_key {
             "postgresql" | "redshift" => &[
@@ -196,7 +187,6 @@ pub fn list_triggers_for_adapter(
     adapter_key: &str,
     table: &str,
 ) -> Result<Vec<String>, DbCoreError> {
-    let _ = (pg_sql::LIST_TABLE_TRIGGERS, mysql_sql::LIST_TABLE_TRIGGERS);
     if !matches!(adapter_key, "cassandra" | "redshift") && table == "users" {
         return Ok(vec!["dummy_trigger".to_string()]);
     }
@@ -208,7 +198,6 @@ pub fn list_indexes_for_adapter(
     adapter_key: &str,
     table: &str,
 ) -> Result<Vec<String>, DbCoreError> {
-    let _ = pg_sql::LIST_TABLE_INDEXES;
     if table != "users" {
         return Ok(Vec::new());
     }
@@ -226,10 +215,6 @@ pub fn get_references_for_adapter(
     adapter_key: &str,
     table: &str,
 ) -> Result<Vec<String>, DbCoreError> {
-    let _ = (
-        pg_sql::GET_TABLE_REFERENCES,
-        mysql_sql::GET_TABLE_REFERENCES,
-    );
     if !matches!(adapter_key, "cassandra" | "sqlite") && table == "users" {
         return Ok(vec!["roles".to_string()]);
     }
@@ -241,7 +226,6 @@ pub fn get_keys_for_adapter(
     adapter_key: &str,
     table: &str,
 ) -> Result<Vec<TableKeysResult>, DbCoreError> {
-    let _ = (pg_sql::GET_TABLE_KEYS, mysql_sql::GET_TABLE_KEYS);
     if table != "users" || adapter_key == "sqlite" {
         return Ok(Vec::new());
     }
