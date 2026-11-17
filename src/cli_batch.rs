@@ -12,7 +12,7 @@ use rust_sql::core::errors::DbCoreError;
 use rust_sql::core::export::export_query_result_to_string;
 use rust_sql::core::keys::system_key_provider;
 use rust_sql::core::result_ops::generate_mermaid_erd;
-use rust_sql::core::safety::analyze_query_safety;
+use rust_sql::core::safety::{analyze_script, SqlDialect};
 use rust_sql::core::servers;
 use rust_sql::core::tunnel::approve_host_key;
 use std::collections::HashMap;
@@ -132,15 +132,14 @@ pub(crate) fn run_headless_batch(
     }
 
     if let Some(sql) = exec_sql {
-        let safety = analyze_query_safety(&sql, read_only);
-        if read_only && !safety.is_read_only_safe {
+        let dialect = SqlDialect::from_adapter_key(&target_server.client);
+        let safety = analyze_script(&sql, dialect, read_only);
+        if safety.is_blocked() {
             eprintln!(
                 "Blocked by Read-Only mode: {}",
                 safety
-                    .findings
-                    .first()
-                    .map(|f| f.reason.as_str())
-                    .unwrap_or("Modification statement not allowed")
+                    .blocked_reason()
+                    .unwrap_or_else(|| "Modification statement not allowed".to_string())
             );
             std::process::exit(1);
         }
@@ -148,6 +147,7 @@ pub(crate) fn run_headless_batch(
         let res = rt.block_on(async {
             let mut session = create_server(target_server.clone()).map_err(|e| e.to_string())?;
             let db_conn = session.create_connection(target_server.database.as_deref());
+            db_conn.read_only = read_only;
             connect_db(db_conn, trust_host_key).await?;
             warn_if_emulated(db_conn);
             db_conn.execute_query(&sql).await.map_err(|e| e.to_string())

@@ -63,6 +63,10 @@ impl DatabaseAdapter for DialectAdapter {
         }
     }
 
+    async fn set_read_only(&self, read_only: bool) -> Result<(), DbCoreError> {
+        self.apply_read_only(read_only).await
+    }
+
     fn wrap_identifier(&self, value: &str) -> String {
         wrap_identifier_for_adapter(&self.adapter_key, value)
     }

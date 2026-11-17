@@ -3,14 +3,24 @@
 
 use crate::common::types::{ListTableColumnsResult, QueryRowResult, TableKeysResult};
 use crate::core::result_ops::generate_mermaid_erd;
-use crate::core::safety::{analyze_query_safety, QuerySafetyReport};
+use crate::core::safety::{analyze_script, QuerySafetyReport, SafetyAnalysis, SqlDialect};
 use crate::state::{AppStore, DbObjectType, ObjectScripts, ScriptActionType};
 use std::collections::HashMap;
 
 impl AppStore {
     /// Evaluates `query_text` against the destructive-query and read-only safety analyzer.
     pub fn check_query_safety(&self, query_text: &str) -> QuerySafetyReport {
-        analyze_query_safety(query_text, self.read_only_mode)
+        self.analyze_safety(query_text).to_report()
+    }
+
+    /// Structured safety analysis of `query_text`, parsed with the connected server's dialect.
+    pub fn analyze_safety(&self, query_text: &str) -> SafetyAnalysis {
+        let dialect = self
+            .db
+            .adapter_key()
+            .map(SqlDialect::from_adapter_key)
+            .unwrap_or(SqlDialect::Generic);
+        analyze_script(query_text, dialect, self.read_only_mode)
     }
 
     /// Generates and executes a default `SELECT TOP N` query for `table` in `database`.

@@ -17,6 +17,8 @@ pub struct DatabaseFacade {
     pub server_session: Option<ServerSession>,
     /// Registry of active cancellable queries keyed by numeric query ID.
     pub cancellable_queries: HashMap<u64, Arc<dyn CancellableQuery>>,
+    /// Read-Only mode for every connection in the session (see [`Self::set_read_only`]).
+    pub read_only: bool,
 }
 
 impl DatabaseFacade {
@@ -60,6 +62,7 @@ impl DatabaseFacade {
         }
         let session = self.server_session.as_mut().unwrap();
         let db_conn = session.create_connection(database);
+        db_conn.read_only = self.read_only;
         if let Err(err) = db_conn.connect().await {
             let db_key = ServerSession::db_key(database);
             if let Some(mut removed) = session.databases.remove(&db_key) {
@@ -71,6 +74,28 @@ impl DatabaseFacade {
             }
             return Err(err);
         }
+        Ok(())
+    }
+
+    /// Adapter key of the connected server (`postgresql`, `sqlite`, ...), if any.
+    pub fn adapter_key(&self) -> Option<&str> {
+        self.server_session.as_ref().map(|s| s.adapter_key.as_str())
+    }
+
+    /// Turns Read-Only mode on or off for every open connection and for later connections.
+    /// The database enforces it in the session as well as the analyzer.
+    pub async fn set_read_only(&mut self, read_only: bool) -> Result<(), String> {
+        if self.read_only == read_only {
+            return Ok(());
+        }
+        if let Some(session) = self.server_session.as_mut() {
+            for conn in session.databases.values_mut() {
+                conn.set_read_only(read_only)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        self.read_only = read_only;
         Ok(())
     }
 

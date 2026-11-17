@@ -1,7 +1,9 @@
 //! Native SQLite database adapter powered by `rusqlite`.
 
+pub mod connection;
 pub mod executor;
 
+pub use connection::open_sqlite;
 pub use executor::{execute_sqlite_statement, map_sqlite_err, SqliteCancellableQuery};
 
 use crate::adapters::{
@@ -27,6 +29,8 @@ pub struct SqliteAdapter {
     pub version: AdapterVersion,
     /// Shared SQLite connection kept open across queries on the same session.
     pub shared_conn: Arc<Mutex<Option<Connection>>>,
+    /// Whether the session is read-only (see [`connection`]).
+    pub read_only: Arc<AtomicBool>,
 }
 
 impl SqliteAdapter {
@@ -41,36 +45,8 @@ impl SqliteAdapter {
             db_path,
             version: AdapterVersion::default(),
             shared_conn: Arc::new(Mutex::new(None)),
+            read_only: Arc::new(AtomicBool::new(false)),
         }
-    }
-
-    fn open_or_with_conn<F, T>(&self, f: F) -> Result<T, DbCoreError>
-    where
-        F: FnOnce(&Connection) -> Result<T, DbCoreError>,
-    {
-        let mut guard = self
-            .shared_conn
-            .lock()
-            .map_err(|e| DbCoreError::Message(e.to_string()))?;
-        if guard.is_none() {
-            let conn = if self.db_path == ":memory:" {
-                Connection::open_in_memory().map_err(map_sqlite_err)?
-            } else {
-                Connection::open(&self.db_path).map_err(map_sqlite_err)?
-            };
-            *guard = Some(conn);
-        }
-        f(guard.as_ref().unwrap())
-    }
-
-    fn query_strings(&self, sql: &str, col_idx: usize) -> Result<Vec<String>, DbCoreError> {
-        self.open_or_with_conn(|conn| {
-            let mut stmt = conn.prepare(sql).map_err(map_sqlite_err)?;
-            let rows = stmt
-                .query_map([], |row| row.get::<_, String>(col_idx))
-                .map_err(map_sqlite_err)?;
-            rows.collect::<Result<Vec<_>, _>>().map_err(map_sqlite_err)
-        })
     }
 }
 
@@ -102,6 +78,10 @@ impl DatabaseAdapter for SqliteAdapter {
 
     fn connection_mode(&self) -> ConnectionMode {
         ConnectionMode::Live
+    }
+
+    async fn set_read_only(&self, read_only: bool) -> Result<(), DbCoreError> {
+        self.apply_read_only(read_only)
     }
 
     fn wrap_identifier(&self, value: &str) -> String {
@@ -212,6 +192,7 @@ impl DatabaseAdapter for SqliteAdapter {
         Ok(Arc::new(SqliteCancellableQuery {
             shared_conn: self.shared_conn.clone(),
             db_path: self.db_path.clone(),
+            read_only: self.read_only.clone(),
             query_text: query_text.to_string(),
             interrupt_handle: Mutex::new(None),
             canceled: AtomicBool::new(false),
@@ -227,7 +208,7 @@ impl DatabaseAdapter for SqliteAdapter {
             statements
                 .into_iter()
                 .map(|s| {
-                    execute_sqlite_statement(conn, &s.text, &s.statement_type, s.execution_type)
+                    execute_sqlite_statement(conn, &s.text, s.statement_type, s.execution_type)
                 })
                 .collect()
         })

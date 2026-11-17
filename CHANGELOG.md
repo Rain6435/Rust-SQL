@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Read-Only mode and the destructive-query check can no longer be bypassed, and fail closed.**
+  - Statements are parsed with `sqlparser` in the connection's dialect instead of scanned for a
+    `WHERE` token. `DELETE FROM users -- WHERE id = 1` and
+    `UPDATE users SET flag = (SELECT 1 WHERE 1=1)` are now `Critical`; both were `Safe` before.
+  - A script that cannot be parsed is `Critical`, needs confirmation, and is blocked in Read-Only
+    mode. Before, it was reported as safe and read-only.
+  - Read-Only mode runs only statements recognized as read-only. `WITH ... DELETE`, `MERGE`,
+    `REPLACE`, `CALL`, `COPY`, `GRANT`, `SET`, `SELECT ... INTO`, and `SELECT ... FOR UPDATE`
+    were all allowed before and are now blocked.
+  - Read-Only mode also makes the database session read-only (PostgreSQL/Redshift read-only
+    transactions, SQLite `SQLITE_OPEN_READ_ONLY` or `query_only`). Switching it on or off reopens
+    a SQLite file connection, which drops an open transaction.
 - **Saved passwords work again, encrypted with a master key from the OS keychain.**
   - On first use Rust-SQL creates a random 256-bit master key in the macOS Keychain, Windows
     Credential Manager, or Linux Secret Service (service `rust-sql`, one entry per data

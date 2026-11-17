@@ -44,6 +44,11 @@ pub trait DatabaseAdapter: Send + Sync {
     fn get_version(&self) -> AdapterVersion;
     /// Reports whether results come from the real server or from the in-memory emulator.
     fn connection_mode(&self) -> ConnectionMode;
+    /// Puts the session into (or out of) a read-only session enforced by the database itself.
+    ///
+    /// This backs up the Read-Only analyzer in [`crate::core::safety`]. It is required: an
+    /// adapter that cannot enforce read-only sessions must return an error, never `Ok(())`.
+    async fn set_read_only(&self, read_only: bool) -> Result<(), DbCoreError>;
     /// Quotes a SQL identifier (`"ident"`, `` `ident` ``, or `[ident]`) for this adapter's dialect.
     fn wrap_identifier(&self, value: &str) -> String;
 

@@ -2,7 +2,6 @@
 
 use crate::common::types::QueryRowResult;
 use crate::core::params::bind_query_parameters;
-use crate::core::safety::analyze_query_safety;
 use crate::state::{AppStore, QueryTab};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -144,13 +143,15 @@ impl AppStore {
             return Ok(Vec::new());
         }
 
-        let safety = analyze_query_safety(query_text, self.read_only_mode);
-        if self.read_only_mode && !safety.is_read_only_safe {
-            let reason = safety
-                .findings
-                .first()
-                .map(|f| f.reason.clone())
-                .unwrap_or_else(|| "Query blocked by Read-Only mode".to_string());
+        let safety = self.analyze_safety(query_text);
+        let enforce = self.db.set_read_only(self.read_only_mode).await;
+        if safety.is_blocked() || enforce.is_err() {
+            let reason = match enforce {
+                Err(e) => format!("Read-Only mode could not be enforced by the database: {e}"),
+                Ok(()) => safety
+                    .blocked_reason()
+                    .unwrap_or_else(|| "Query blocked by Read-Only mode".to_string()),
+            };
             if let Some(q) = self.queries.queries_by_id.get_mut(&query_id) {
                 q.results = None;
                 q.is_executing = false;

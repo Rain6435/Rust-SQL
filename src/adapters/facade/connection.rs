@@ -26,6 +26,8 @@ pub struct DatabaseConnection {
     pub connection: Option<Box<dyn DatabaseAdapter>>,
     /// Active SSH local port-forwarding tunnel when SSH is configured.
     pub ssh_tunnel: Option<Arc<TunnelHandle>>,
+    /// Read-Only mode: applied to the database session on every connect.
+    pub read_only: bool,
 }
 
 impl DatabaseConnection {
@@ -38,6 +40,7 @@ impl DatabaseConnection {
             connecting: false,
             connection: None,
             ssh_tunnel: None,
+            read_only: false,
         }
     }
 
@@ -90,6 +93,13 @@ impl DatabaseConnection {
             self.connecting = false;
             return Err(err);
         }
+        if self.read_only {
+            if let Err(err) = adapter.set_read_only(true).await {
+                let _ = adapter.disconnect().await;
+                self.connecting = false;
+                return Err(err);
+            }
+        }
 
         self.connection = Some(adapter);
         self.connecting = false;
@@ -105,6 +115,15 @@ impl DatabaseConnection {
         if let Some(tunnel) = self.ssh_tunnel.take() {
             tunnel.close();
         }
+    }
+
+    /// Turns Read-Only mode on or off, applying it to the live session if connected.
+    pub async fn set_read_only(&mut self, read_only: bool) -> Result<(), DbCoreError> {
+        if let Some(adapter) = &self.connection {
+            adapter.set_read_only(read_only).await?;
+        }
+        self.read_only = read_only;
+        Ok(())
     }
 
     /// Returns the connected database server version metadata.
