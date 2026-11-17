@@ -1,19 +1,18 @@
 //! Server entry sanitization, runtime configuration merging, and JSON file I/O helpers.
 
-use crate::common::types::{
-    Config, ConfigFile, LogOptions, Password, RepositoryInfo, Server, SslConfig,
-};
+use crate::common::types::{Config, ConfigFile, LogOptions, RepositoryInfo, Server, SslConfig};
 use crate::core::config::{config_cache, get_sync, path, prepare_sync};
 use crate::core::keys::{system_key_provider, KeyProvider};
-use crate::core::servers::{decrypt_secrets, encrypt_secrets};
+use crate::core::servers::encrypt_secrets;
 use std::path::Path;
 use uuid::Uuid;
 
 /// Sanitizes a single [`Server`] entry by assigning a UUID if missing, defaulting `ssl` to `false`,
-/// and encrypting any plaintext passwords with the master key from `keys`.
+/// and encrypting any plaintext credentials with the master key from `keys`.
 ///
-/// The key is requested only when a plaintext password has to be encrypted; if it is
-/// unavailable the error is returned and the entry is not rewritten.
+/// The key is requested only when the entry holds a credential; if it is unavailable the
+/// error is returned and the entry is not rewritten. Encrypted values are verified against the
+/// entry's ID, so a value that cannot be decrypted is reported instead of kept silently.
 pub fn sanitize_server(server: &Server, keys: &dyn KeyProvider) -> Result<Server, String> {
     let mut srv = server.clone();
 
@@ -25,24 +24,7 @@ pub fn sanitize_server(server: &Server, keys: &dyn KeyProvider) -> Result<Server
         srv.ssl = Some(SslConfig::Bool(false));
     }
 
-    match srv.encrypted {
-        None => encrypt_secrets(&srv, keys, None),
-        Some(true) => {
-            let has_legacy_plaintext =
-                |pw: &Option<Password>| matches!(pw, Some(Password::Plain(p)) if !p.is_empty());
-            if has_legacy_plaintext(&srv.password)
-                || srv
-                    .ssh
-                    .as_ref()
-                    .is_some_and(|ssh| has_legacy_plaintext(&ssh.password))
-            {
-                // Legacy unsalted values are rejected; there is no migration path.
-                decrypt_secrets(&srv, keys)?;
-            }
-            Ok(srv)
-        }
-        Some(false) => Ok(srv),
-    }
+    encrypt_secrets(&srv, keys).map_err(|e| format!("Saved connection \"{}\": {e}", srv.name))
 }
 
 /// Sanitizes all server entries within a [`ConfigFile`].

@@ -61,7 +61,8 @@ password, session ID, or CSRF token. Administrators read it with `AUDIT_LIST`.
 
 ### Encryption key
 
-The server obtains the master key for saved passwords through the OS keychain key provider and
-never accepts one from a client. **Until Workstream 4 lands, the keychain provider is not
-implemented**: saved passwords cannot be stored or decrypted (in any front end), and the
-server prints a warning at startup. Connections without a saved password work normally.
+The server reads the master key for saved passwords from the OS keychain at startup (creating it
+on first run) and never accepts one from a client. If the keychain is unavailable or access is
+denied, the server refuses to start and prints why. On Linux this requires a running Secret
+Service in the session that starts the server; a headless Linux host without one is not
+supported. See [Saved passwords and the OS keychain](../../README.md#saved-passwords-and-the-os-keychain).

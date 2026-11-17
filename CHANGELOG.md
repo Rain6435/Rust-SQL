@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Saved passwords work again, encrypted with a master key from the OS keychain.**
+  - On first use Rust-SQL creates a random 256-bit master key in the macOS Keychain, Windows
+    Credential Manager, or Linux Secret Service (service `rust-sql`, one entry per data
+    directory). The keychain is required: without it, saved credentials are neither stored nor
+    decrypted and the web server refuses to start. Linux without a running Secret Service is
+    unsupported.
+  - Values are encrypted with XChaCha20-Poly1305 (`{"ciphertext": "v2:..."}`) and bound to their
+    connection and field, so a value copied to another connection does not decrypt. Duplicating a
+    connection re-encrypts its credentials for the copy.
+  - SSH key passphrases are now encrypted at rest like passwords, and a saved passphrase is used
+    instead of prompting.
+  - **Breaking:** the old AES-256-CBC format and the `encrypted` flag are gone, with no migration.
+    A configuration that still holds `{ivText, encryptedText}` values fails to load with an error
+    asking you to remove those passwords and enter them again.
 - **The web UI is now multi-user, signed-in, and served over HTTPS.**
   - Accounts live in `rust-sql.db` next to the configuration file, with Argon2id password hashes
     (12 characters minimum). Create the first administrator with

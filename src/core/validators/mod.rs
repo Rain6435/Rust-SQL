@@ -197,12 +197,13 @@ fn validate_password(pw: &mut Password, path: &str, errors: &mut ValidationError
                     format!("\"{path}\" is not allowed to be empty"),
                 );
             }
-            *s = trimmed;
+            *s = trimmed.into();
         }
         Password::Encrypted(enc) => {
-            enc.iv_text = enc.iv_text.trim().to_string();
-            enc.encrypted_text = enc.encrypted_text.trim().to_string();
-            if enc.iv_text.is_empty() && enc.encrypted_text.is_empty() {
+            if !enc
+                .ciphertext
+                .starts_with(crate::core::crypto::FORMAT_V2_PREFIX)
+            {
                 errors.insert(
                     path.to_string(),
                     format!("\"{path}\" contains an invalid value"),

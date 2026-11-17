@@ -12,7 +12,7 @@ fn test_validate_valid_servers() {
         host: Some("10.10.10.10".into()),
         port: Some(5432),
         user: Some("user".into()),
-        password: Some(Password::Plain("password".into())),
+        password: Some(Password::plain("password")),
         database: Some("company".into()),
         ssl: Some(SslConfig::Bool(false)),
         ..Default::default()
@@ -21,8 +21,7 @@ fn test_validate_valid_servers() {
 
     let s2 = Server {
         password: Some(Password::Encrypted(EncryptedPassword {
-            iv_text: "wGf6X9T+QSygOHqtgQPlcA==".into(),
-            encrypted_text: "0LySDs9WPAvwSS9Qv+W3/A==".into(),
+            ciphertext: "v2:AAAA".into(),
         })),
         ..s1.clone()
     };
@@ -56,7 +55,7 @@ fn test_validate_invalid_client() {
         host: Some("10.10.10.10".into()),
         port: Some(5432),
         user: Some("user".into()),
-        password: Some(Password::Plain("password".into())),
+        password: Some(Password::plain("password")),
         database: Some("company".into()),
         ssl: Some(SslConfig::Bool(false)),
         ..Default::default()

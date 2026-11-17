@@ -3,7 +3,7 @@
 //!
 //! # Architecture Overview
 //! - [`common`]: Shared domain models, configuration types, IPC event constants, and string/version utilities.
-//! - [`core`]: Core services including AES-256-CBC secret encryption, SSH port-forwarding tunnels,
+//! - [`core`]: Core services including keychain-backed XChaCha20-Poly1305 credential encryption, SSH port-forwarding tunnels,
 //!   SQL statement splitter/classifier, SQL formatter, connection URI parser, query parameter binder,
 //!   destructive query safety analyzer, bookmarks & audit history manager, and multi-format exporters.
 //! - [`adapters`]: Database adapter trait, static dialect registry (`PostgreSQL`, `Redshift`, `MySQL`,

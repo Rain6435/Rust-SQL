@@ -1,51 +1,8 @@
 //! Server configuration, SSH tunnel settings, SSL options, and database/schema filter types.
 
+use super::secret::Password;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-/// AES-256-CBC encrypted password payload containing base64-encoded IV and ciphertext.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct EncryptedPassword {
-    /// Base64-encoded 16-byte initialization vector.
-    pub iv_text: String,
-    /// Base64-encoded PKCS#7-padded AES-256-CBC ciphertext.
-    pub encrypted_text: String,
-}
-
-/// Represents a password that may be either plaintext in memory or AES-256-CBC encrypted on disk.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Password {
-    /// Encrypted password structure stored in `rust-sql.json`.
-    Encrypted(EncryptedPassword),
-    /// Decrypted or unsaved plaintext password.
-    Plain(String),
-}
-
-impl Default for Password {
-    fn default() -> Self {
-        Password::Plain(String::new())
-    }
-}
-
-impl Password {
-    /// Returns the plaintext string if the password is in `Plain` form.
-    pub fn as_plain(&self) -> Option<&str> {
-        match self {
-            Password::Plain(s) => Some(s.as_str()),
-            Password::Encrypted(_) => None,
-        }
-    }
-
-    /// Returns `true` if the plaintext or encrypted payload is empty.
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Password::Plain(s) => s.is_empty(),
-            Password::Encrypted(e) => e.iv_text.is_empty() && e.encrypted_text.is_empty(),
-        }
-    }
-}
 
 /// SSH bastion/jump-host configuration for port-forwarding database connections.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -53,12 +10,12 @@ impl Password {
 pub struct SshConfig {
     /// SSH login username.
     pub user: String,
-    /// Optional SSH password (plaintext or encrypted).
+    /// Optional SSH password (plaintext in memory, encrypted on disk).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password: Option<Password>,
-    /// Optional passphrase for decrypting an encrypted private key at runtime.
+    /// Optional saved passphrase for the private key (plaintext in memory, encrypted on disk).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub passphrase: Option<String>,
+    pub passphrase: Option<Password>,
     /// Path to an OpenSSH private key file (e.g., `~/.ssh/id_ed25519`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub private_key: Option<String>,
@@ -223,7 +180,7 @@ pub struct Server {
     /// Database authentication username.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
-    /// Database authentication password (plaintext or encrypted).
+    /// Database authentication password (plaintext in memory, encrypted on disk).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password: Option<Password>,
     /// Optional application name reported to the database server.
@@ -238,9 +195,6 @@ pub struct Server {
     /// Optional SSL/TLS configuration.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ssl: Option<SslConfig>,
-    /// Flag indicating whether secret fields on this struct are currently encrypted.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub encrypted: Option<bool>,
     /// Default database name, keyspace, or SQLite file path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub database: Option<String>,

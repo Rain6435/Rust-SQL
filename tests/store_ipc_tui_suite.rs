@@ -35,7 +35,7 @@ async fn test_servers_crud_state_store_ipc_and_tui() {
         port: Some(3306),
         database: Some("authentication".into()),
         user: Some("root".into()),
-        password: Some(Password::Plain("password".into())),
+        password: Some(Password::plain("password")),
         ..Default::default()
     };
 
@@ -43,10 +43,13 @@ async fn test_servers_crud_state_store_ipc_and_tui() {
     assert!(added.validation_errors.is_none());
     let created = added.data.expect("created server");
     assert!(!created.id.is_empty());
-    assert_eq!(created.encrypted, Some(true));
+    assert!(
+        matches!(&created.password, Some(Password::Encrypted(e)) if e.ciphertext.starts_with("v2:")),
+        "saved password must be stored as v2 ciphertext"
+    );
 
     let dec = servers::decrypt_secrets(&created, &*keys).expect("decrypt");
-    assert_eq!(dec.password, Some(Password::Plain("password".into())));
+    assert_eq!(dec.password, Some(Password::plain("password")));
 
     let draft = ServerFormDraft::from_server(Some(&dec));
     let converted = draft.to_server();

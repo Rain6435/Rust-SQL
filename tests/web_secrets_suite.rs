@@ -48,17 +48,17 @@ fn seed(t: &TestApp) -> (String, String) {
     (add(&sqlite), add(&tunneled))
 }
 
-/// Every string an attacker must never see: plaintexts plus the stored ciphertexts and IVs.
+/// Every string an attacker must never see: plaintexts plus the stored ciphertexts.
 /// (The private key *path* may appear in a connection error; listings mask it, see
 /// `public_server` tests. Key material is never read into a response.)
 fn forbidden_strings() -> Vec<String> {
     let mut out = vec![DB_PW.into(), SSH_PW.into(), PASSPHRASE.into()];
     for s in config::get_sync().unwrap().servers {
-        let pws = [s.password.clone(), s.ssh.and_then(|x| x.password)];
+        let ssh = s.ssh.clone().unwrap_or_default();
+        let pws = [s.password.clone(), ssh.password, ssh.passphrase];
         for p in pws.into_iter().flatten() {
             if let Password::Encrypted(e) = p {
-                out.push(e.encrypted_text);
-                out.push(e.iv_text);
+                out.push(e.ciphertext);
             }
         }
     }
@@ -181,10 +181,17 @@ async fn clients_cannot_send_keys_or_ciphertext_and_omitted_passwords_are_kept()
         "{with_secret}"
     );
     let cipher = json!({ "name": "c", "client": "sqlite", "ssl": false,
-        "password": { "ivText": "AAAA", "encryptedText": "BBBB" } });
+        "password": { "ciphertext": "v2:AAAA" } });
     let refused = t.ipc_as(&admin, &s, SERVERS_ADD, vec![cipher]).await;
     assert!(
         refused["error"].as_str().unwrap().contains("plain text"),
+        "{refused}"
+    );
+    let legacy = json!({ "name": "c", "client": "sqlite", "ssl": false,
+        "password": { "ivText": "AAAA", "encryptedText": "BBBB" } });
+    let refused = t.ipc_as(&admin, &s, SERVERS_ADD, vec![legacy]).await;
+    assert!(
+        refused["error"].as_str().unwrap().contains("pre-v2"),
         "{refused}"
     );
 

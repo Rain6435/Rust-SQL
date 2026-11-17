@@ -223,3 +223,46 @@ jobs:
 
       - name: Build documentation
         run: cargo doc --no-deps --document-private-items
+
+  os-keychain:
+    name: OS Keychain (Linux Secret Service)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libssl-dev \
+            libsqlite3-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libgtk-3-dev \
+            libgl1-mesa-dev \
+            libegl1-mesa-dev \
+            libfontconfig1-dev \
+            libfreetype-dev \
+            dbus \
+            gnome-keyring
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run keychain tests against a real Secret Service
+        env:
+          RUST_SQL_TEST_OS_KEYCHAIN: "1"
+        run: |
+          cargo test --test os_keychain_suite --no-run
+          dbus-run-session -- sh -c '
+            echo ci-keyring-password | gnome-keyring-daemon --unlock --components=secrets
+            cargo test --test os_keychain_suite -- --nocapture
+          '

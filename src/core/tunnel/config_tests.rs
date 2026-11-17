@@ -37,7 +37,7 @@ fn test_config_tunnel_validation() {
 #[test]
 fn password_is_selected_and_never_printed() {
     let mut ssh = base_ssh();
-    ssh.password = Some(Password::Plain("s3cret-pw".into()));
+    ssh.password = Some(Password::plain("s3cret-pw"));
     let cfg = config_tunnel(&server_with(ssh)).unwrap();
     assert_eq!(cfg.auth_method(), Some(SshAuthMethod::Password));
     assert_eq!(
@@ -53,7 +53,7 @@ fn private_key_takes_priority_over_password() {
     let key_path = dir.path().join("id_test");
     std::fs::write(&key_path, "KEY MATERIAL THAT IS SECRET").unwrap();
     let mut ssh = base_ssh();
-    ssh.password = Some(Password::Plain("pw".into()));
+    ssh.password = Some(Password::plain("pw"));
     ssh.private_key = Some(key_path.to_string_lossy().into_owned());
     ssh.passphrase = Some("phrase".into());
     let cfg = config_tunnel(&server_with(ssh)).unwrap();
@@ -67,7 +67,7 @@ fn private_key_takes_priority_over_password() {
 fn agent_requires_socket() {
     let mut ssh = base_ssh();
     ssh.use_agent = Some(true);
-    ssh.password = Some(Password::Plain("pw".into()));
+    ssh.password = Some(Password::plain("pw"));
     let prev = std::env::var("SSH_AUTH_SOCK").ok();
     std::env::remove_var("SSH_AUTH_SOCK");
     let res = config_tunnel(&server_with(ssh.clone()));

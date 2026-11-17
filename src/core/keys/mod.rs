@@ -5,17 +5,20 @@
 //! from a client, or substituted when the provider fails: a missing key is an explicit
 //! [`KeyError`], and callers refuse to store or decrypt credentials.
 //!
-//! The production provider is [`OsKeychainProvider`]. Reading and creating the master key in
-//! the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service) is
-//! Workstream 4; until it lands, the provider reports the keychain as unavailable, so saved
-//! passwords cannot be stored or decrypted. Connections without saved passwords still work.
+//! The production provider is [`OsKeychainProvider`]: on first use it creates a random 256-bit
+//! master key in the OS keychain (macOS Keychain, Windows Credential Manager, or the Linux
+//! Secret Service) and reads it back on later runs. There is no fallback store.
 //!
 //! [`InMemoryKeyProvider`] exists only for tests and is only reachable through constructors
 //! whose names end in `_for_tests`. No production code path constructs it.
 
+mod keychain;
+
+pub use keychain::{keychain_account_for, OsKeychainProvider, KEYCHAIN_SERVICE};
+
 use rand::Rng;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use thiserror::Error;
 use zeroize::Zeroizing;
 
@@ -30,6 +33,13 @@ impl MasterKey {
     /// Wraps raw key bytes.
     pub fn from_bytes(bytes: [u8; MASTER_KEY_LEN]) -> Self {
         Self(Zeroizing::new(bytes))
+    }
+
+    /// Generates a fresh key from the operating system CSPRNG.
+    pub fn generate() -> Self {
+        let mut key = Self::from_bytes([0u8; MASTER_KEY_LEN]);
+        rand::rng().fill_bytes(key.0.as_mut());
+        key
     }
 
     /// Returns the raw key bytes.
@@ -47,7 +57,7 @@ impl fmt::Debug for MasterKey {
 /// Why the master key could not be obtained.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum KeyError {
-    /// The key store cannot be reached, access was denied, or it is not implemented yet.
+    /// The keychain cannot be reached, access was denied, or the stored entry is unusable.
     #[error("Saved credentials are unavailable: {0}")]
     Unavailable(String),
 }
@@ -58,24 +68,15 @@ pub trait KeyProvider: Send + Sync {
     fn master_key(&self) -> Result<MasterKey, KeyError>;
 }
 
-/// Production provider backed by the operating system keychain.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct OsKeychainProvider;
-
-/// Message returned until the keychain-backed master key (Workstream 4) is implemented.
-pub const KEYCHAIN_NOT_IMPLEMENTED: &str = "the OS keychain master key is not implemented yet \
-     (Workstream 4), so saved passwords cannot be stored or decrypted. \
-     Connections without a saved password still work";
-
-impl KeyProvider for OsKeychainProvider {
-    fn master_key(&self) -> Result<MasterKey, KeyError> {
-        Err(KeyError::Unavailable(KEYCHAIN_NOT_IMPLEMENTED.to_string()))
-    }
-}
-
-/// Returns the production key provider (the OS keychain).
+/// Returns the process-wide production key provider (the OS keychain).
+///
+/// The same instance is shared by every caller so the keychain is read at most once per
+/// process after it succeeds.
 pub fn system_key_provider() -> Arc<dyn KeyProvider> {
-    Arc::new(OsKeychainProvider)
+    static PROVIDER: OnceLock<Arc<OsKeychainProvider>> = OnceLock::new();
+    PROVIDER
+        .get_or_init(|| Arc::new(OsKeychainProvider::for_current_data_dir()))
+        .clone()
 }
 
 /// Shared handle to a [`KeyProvider`] that defaults to [`system_key_provider`].
@@ -102,9 +103,9 @@ pub struct InMemoryKeyProvider {
 impl InMemoryKeyProvider {
     /// Creates a provider with a fresh random key, for tests only.
     pub fn new_for_tests() -> Self {
-        let mut bytes = [0u8; MASTER_KEY_LEN];
-        rand::rng().fill_bytes(&mut bytes);
-        Self::with_key_for_tests(bytes)
+        Self {
+            key: MasterKey::generate(),
+        }
     }
 
     /// Creates a provider with the given key bytes, for tests only.
@@ -121,20 +122,35 @@ impl KeyProvider for InMemoryKeyProvider {
     }
 }
 
+/// Test-only provider that always fails, standing in for an unavailable keychain.
+#[cfg(test)]
+pub(crate) struct UnavailableKeyProvider;
+
+#[cfg(test)]
+impl KeyProvider for UnavailableKeyProvider {
+    fn master_key(&self) -> Result<MasterKey, KeyError> {
+        Err(KeyError::Unavailable(
+            "the OS keychain is unavailable (test)".into(),
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn production_provider_fails_closed_instead_of_returning_a_default_key() {
-        let err = system_key_provider().master_key().unwrap_err();
-        assert!(err.to_string().contains("keychain"), "{err}");
-    }
-
-    #[test]
     fn master_key_debug_output_is_redacted() {
         let key = MasterKey::from_bytes([7u8; MASTER_KEY_LEN]);
         assert_eq!(format!("{key:?}"), "MasterKey(<redacted>)");
+    }
+
+    #[test]
+    fn generated_keys_are_random() {
+        assert_ne!(
+            MasterKey::generate().as_bytes(),
+            MasterKey::generate().as_bytes()
+        );
     }
 
     #[test]

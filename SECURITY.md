@@ -11,9 +11,11 @@ The following versions of **Rust-SQL** currently receive security updates:
 
 ## Built-In Security Controls
 
-1. **AES-256-CBC Credential Encryption (`src/core/crypto.rs`)**:
-   - Database and SSH passwords saved in `rust-sql.json` are encrypted at rest using AES-256-CBC with per-password random 16-byte IVs (`EncryptedPassword { ivText, encryptedText }`).
-   - Legacy insecure cipher formats (`unsafeDecrypt`) are explicitly rejected.
+1. **Credential Encryption with an OS Keychain Master Key (`src/core/crypto.rs`, `src/core/keys/`)**:
+   - Saved database passwords, SSH passwords, and SSH key passphrases are encrypted at rest with XChaCha20-Poly1305 and a random 24-byte nonce per value, stored as `{"ciphertext": "v2:<base64>"}`. Values without a recognized version prefix are rejected.
+   - The key is derived with HKDF-SHA256 from a random 256-bit master key kept in the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service). There is no default key and no fallback store; if the keychain is unavailable, credentials are neither stored nor decrypted.
+   - Each ciphertext is bound to its connection ID and field name as associated data, so a value moved to another connection or field fails to decrypt.
+   - The master key and decrypted passwords are held in memory in buffers that are zeroed on drop.
 2. **Read-Only Guardrail & Destructive Query Analyzer (`src/core/safety.rs`)**:
    - Connections can be locked into **Read-Only Mode** (`--read-only` or `🔒 Read-Only` in GUI), blocking all data-modifying and schema-altering statements (`INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `TRUNCATE`, `CREATE`).
    - Unconditional `DELETE` and `UPDATE` statements without `WHERE` clauses are flagged before execution.

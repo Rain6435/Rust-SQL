@@ -128,7 +128,19 @@ impl AppStore {
     }
 
     /// Duplicates `server` under a unique name and persists the copy.
-    pub fn duplicate_server(&mut self, mut server: Server) -> Result<Server, ValidationErrors> {
+    ///
+    /// Saved credentials are bound to the original's ID, so they are decrypted here and
+    /// re-encrypted for the copy's new ID when it is saved.
+    pub fn duplicate_server(&mut self, server: Server) -> Result<Server, ValidationErrors> {
+        let mut server = match servers::decrypt_secrets(&server, self.key_provider()) {
+            Ok(s) => s,
+            Err(e) => {
+                let mut map = ValidationErrors::new();
+                map.insert("general".to_string(), e);
+                self.servers.error = Some(map.clone());
+                return Err(map);
+            }
+        };
         self.servers.is_saving = true;
         let all = servers::get_all_sync().unwrap_or_default();
         server.name = servers::get_unique_name(&server, &all);

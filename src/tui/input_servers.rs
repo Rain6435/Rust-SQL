@@ -116,7 +116,7 @@ impl TuiApp {
                     host: opt(&self.form_draft.host),
                     port: self.form_draft.port.parse::<u32>().ok(),
                     user: opt(&self.form_draft.user),
-                    password: opt(&self.form_draft.password).map(Password::Plain),
+                    password: opt(&self.form_draft.password).map(Password::plain),
                     database: opt(&self.form_draft.database),
                     ssl: Some(SslConfig::Bool(false)),
                     ..Default::default()

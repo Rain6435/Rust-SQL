@@ -1,120 +1,140 @@
-//! AES-256-CBC password encryption and decryption for saved server credentials.
+//! Authenticated encryption of saved credentials (format `v2`).
 //!
-//! The key is always the 256-bit master key from a [`KeyProvider`](crate::core::keys::KeyProvider);
-//! there is no default key and no key derived from a string. Workstream 4 replaces this cipher
-//! with versioned, authenticated encryption bound to each record.
+//! - **Cipher:** XChaCha20-Poly1305 with a fresh random 24-byte nonce for every value.
+//! - **Key:** a subkey derived with HKDF-SHA256 from the 256-bit master key held in the OS
+//!   keychain (see [`crate::core::keys`]), using the info string [`CREDENTIAL_KEY_INFO`]. No key
+//!   is ever derived from a password or a constant.
+//! - **Associated data:** the record (connection) ID and the field name, length-prefixed, so a
+//!   ciphertext moved to another connection or another field fails to decrypt.
+//! - **Encoding:** `v2:` followed by standard base64 of `nonce || ciphertext || tag`. Values
+//!   without a recognized version prefix are rejected; there is no legacy format.
 
-use crate::common::types::EncryptedPassword;
+use crate::common::types::{EncryptedPassword, SecretString};
 use crate::core::keys::MasterKey;
-use aes::cipher::{block_padding::Pkcs7, BlockModeDecrypt, BlockModeEncrypt, KeyIvInit};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use chacha20poly1305::aead::{Aead, KeyInit, Payload};
+use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
+use hkdf::Hkdf;
 use rand::Rng;
+use sha2::Sha256;
 use thiserror::Error;
+use zeroize::Zeroizing;
 
-type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
-type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
+/// Version tag prefixed to every encrypted value.
+pub const FORMAT_V2_PREFIX: &str = "v2:";
 
-/// Cryptographic error variants returned during password encryption or decryption.
+/// HKDF info string for the subkey that encrypts saved connection credentials.
+pub const CREDENTIAL_KEY_INFO: &[u8] = b"rust-sql/v2/connection-credentials";
+
+const AAD_DOMAIN: &[u8] = b"rust-sql/v2/credential";
+const NONCE_LEN: usize = 24;
+const TAG_LEN: usize = 16;
+
+/// Errors from encrypting or decrypting a credential. None of them include secret material.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum CryptoError {
-    /// Attempted to encrypt an empty plaintext string.
-    #[error("Missing plain text")]
-    MissingPlainText,
-    /// Encrypted payload is missing its IV or ciphertext.
-    #[error("Invalid encrypted valued")]
-    InvalidEncryptedValue,
-    /// Base64 decoding, IV length, or PKCS#7 unpadding failed.
-    #[error("The encrypted value is not a valid format")]
-    InvalidEncryptedFormat,
-    /// Legacy non-IV cipher format is deprecated and rejected.
-    #[error("This method is no longer implemented. You will need to delete any existing ecrypted values and re-encrypt them using the new encrypt method")]
-    UnsafeDecryptDeprecated,
+    /// The record ID used as associated data is empty, so the value could not be bound to it.
+    #[error("Cannot encrypt or decrypt a credential without a connection ID")]
+    MissingRecordId,
+    /// The value has no recognized version prefix (only `v2:` is supported).
+    #[error("Unsupported encrypted value format: only \"v2:\" values are accepted")]
+    UnsupportedVersion,
+    /// The base64 payload is malformed or too short to hold a nonce and tag.
+    #[error("The encrypted value is malformed")]
+    Malformed,
+    /// Authentication failed: the value was altered, belongs to another connection or field,
+    /// or was encrypted with a different master key.
+    #[error(
+        "Saved credential could not be decrypted: it was modified, belongs to a different \
+         connection, or was encrypted with a different OS keychain master key"
+    )]
+    AuthenticationFailed,
+    /// The decrypted bytes are not valid UTF-8.
+    #[error("The decrypted credential is not valid UTF-8")]
+    InvalidUtf8,
 }
 
-/// Encrypts `plain_text` using AES-256-CBC with a random 16-byte IV and PKCS#7 padding.
-pub fn encrypt(plain_text: &str, key: &MasterKey) -> Result<EncryptedPassword, CryptoError> {
-    if plain_text.is_empty() {
-        return Err(CryptoError::MissingPlainText);
+fn credential_cipher(key: &MasterKey) -> XChaCha20Poly1305 {
+    let hk = Hkdf::<Sha256>::new(None, key.as_bytes());
+    let mut sub = Zeroizing::new([0u8; 32]);
+    hk.expand(CREDENTIAL_KEY_INFO, sub.as_mut())
+        .expect("32 bytes is a valid HKDF-SHA256 output length");
+    XChaCha20Poly1305::new(&Key::from(*sub))
+}
+
+/// Builds the associated data binding a value to `record_id` and `field`.
+fn associated_data(record_id: &str, field: &str) -> Vec<u8> {
+    let mut aad = Vec::with_capacity(AAD_DOMAIN.len() + record_id.len() + field.len() + 8);
+    aad.extend_from_slice(AAD_DOMAIN);
+    for part in [record_id, field] {
+        aad.extend_from_slice(&(part.len() as u32).to_be_bytes());
+        aad.extend_from_slice(part.as_bytes());
     }
-    let mut iv = [0u8; 16];
-    rand::rng().fill_bytes(&mut iv);
+    aad
+}
 
-    let pt_bytes = plain_text.as_bytes();
-    let mut buf = vec![0u8; pt_bytes.len() + 16];
-    buf[..pt_bytes.len()].copy_from_slice(pt_bytes);
-
-    let ct = Aes256CbcEnc::new(key.as_bytes().into(), &iv.into())
-        .encrypt_padded::<Pkcs7>(&mut buf, pt_bytes.len())
-        .map_err(|_| CryptoError::InvalidEncryptedFormat)?;
-
+/// Encrypts `plain_text` for field `field` of the connection `record_id`.
+///
+/// Empty plaintext is allowed and round-trips; callers decide whether to store it.
+pub fn encrypt(
+    plain_text: &str,
+    key: &MasterKey,
+    record_id: &str,
+    field: &str,
+) -> Result<EncryptedPassword, CryptoError> {
+    if record_id.trim().is_empty() {
+        return Err(CryptoError::MissingRecordId);
+    }
+    let mut nonce = [0u8; NONCE_LEN];
+    rand::rng().fill_bytes(&mut nonce);
+    let aad = associated_data(record_id, field);
+    let ct = credential_cipher(key)
+        .encrypt(
+            &XNonce::from(nonce),
+            Payload {
+                msg: plain_text.as_bytes(),
+                aad: &aad,
+            },
+        )
+        .map_err(|_| CryptoError::Malformed)?;
+    let mut blob = Vec::with_capacity(NONCE_LEN + ct.len());
+    blob.extend_from_slice(&nonce);
+    blob.extend_from_slice(&ct);
     Ok(EncryptedPassword {
-        iv_text: BASE64.encode(iv),
-        encrypted_text: BASE64.encode(ct),
+        ciphertext: format!("{FORMAT_V2_PREFIX}{}", BASE64.encode(blob)),
     })
 }
 
-/// Decrypts an [`EncryptedPassword`] using AES-256-CBC and the master `key`.
-pub fn decrypt(encrypted: &EncryptedPassword, key: &MasterKey) -> Result<String, CryptoError> {
-    if encrypted.iv_text.is_empty() || encrypted.encrypted_text.is_empty() {
-        return Err(CryptoError::InvalidEncryptedValue);
+/// Decrypts `encrypted`, which must have been produced for the same `record_id` and `field`.
+pub fn decrypt(
+    encrypted: &EncryptedPassword,
+    key: &MasterKey,
+    record_id: &str,
+    field: &str,
+) -> Result<SecretString, CryptoError> {
+    if record_id.trim().is_empty() {
+        return Err(CryptoError::MissingRecordId);
     }
-
-    let iv_vec = BASE64
-        .decode(&encrypted.iv_text)
-        .map_err(|_| CryptoError::InvalidEncryptedFormat)?;
-    if iv_vec.len() != 16 {
-        return Err(CryptoError::InvalidEncryptedFormat);
+    let body = encrypted
+        .ciphertext
+        .strip_prefix(FORMAT_V2_PREFIX)
+        .ok_or(CryptoError::UnsupportedVersion)?;
+    let blob = BASE64.decode(body).map_err(|_| CryptoError::Malformed)?;
+    if blob.len() < NONCE_LEN + TAG_LEN {
+        return Err(CryptoError::Malformed);
     }
-    let mut iv = [0u8; 16];
-    iv.copy_from_slice(&iv_vec);
-
-    let mut ct_vec = BASE64
-        .decode(&encrypted.encrypted_text)
-        .map_err(|_| CryptoError::InvalidEncryptedFormat)?;
-
-    let pt = Aes256CbcDec::new(key.as_bytes().into(), &iv.into())
-        .decrypt_padded::<Pkcs7>(&mut ct_vec)
-        .map_err(|_| CryptoError::InvalidEncryptedFormat)?;
-
-    String::from_utf8(pt.to_vec()).map_err(|_| CryptoError::InvalidEncryptedFormat)
-}
-
-/// Rejects legacy un-salted cipher strings and instructs the caller to re-encrypt with [`encrypt`].
-pub fn unsafe_decrypt(_encrypted_text: &str, _key: &MasterKey) -> Result<String, CryptoError> {
-    Err(CryptoError::UnsafeDecryptDeprecated)
+    let (nonce, ct) = blob.split_at(NONCE_LEN);
+    let nonce: [u8; NONCE_LEN] = nonce.try_into().map_err(|_| CryptoError::Malformed)?;
+    let aad = associated_data(record_id, field);
+    let plain = Zeroizing::new(
+        credential_cipher(key)
+            .decrypt(&XNonce::from(nonce), Payload { msg: ct, aad: &aad })
+            .map_err(|_| CryptoError::AuthenticationFailed)?,
+    );
+    let text = std::str::from_utf8(&plain).map_err(|_| CryptoError::InvalidUtf8)?;
+    Ok(SecretString::from(text))
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn key(b: u8) -> MasterKey {
-        MasterKey::from_bytes([b; 32])
-    }
-
-    #[test]
-    fn test_encrypt_decrypt_roundtrip_with_master_key() {
-        let enc = encrypt("my-secret-db-password-123!", &key(1)).unwrap();
-        assert_eq!(
-            decrypt(&enc, &key(1)).unwrap(),
-            "my-secret-db-password-123!"
-        );
-    }
-
-    #[test]
-    fn test_errors() {
-        assert_eq!(encrypt("", &key(1)), Err(CryptoError::MissingPlainText));
-        let empty = EncryptedPassword {
-            iv_text: "".into(),
-            encrypted_text: "".into(),
-        };
-        assert_eq!(
-            decrypt(&empty, &key(1)),
-            Err(CryptoError::InvalidEncryptedValue)
-        );
-        assert_eq!(
-            unsafe_decrypt("fa1d88ee82bd4439", &key(1)),
-            Err(CryptoError::UnsafeDecryptDeprecated)
-        );
-    }
-}
+#[path = "crypto_tests.rs"]
+mod tests;
