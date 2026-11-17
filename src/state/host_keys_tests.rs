@@ -74,5 +74,15 @@ async fn prompt_then_approval() {
         Ok(true)
     );
     assert!(config::get_sync().unwrap().ssh_host_keys.is_empty());
+
+    // Both the approval and the deletion are in the audit log, attributed to the local user.
+    let audit = crate::core::appdb::AppDb::open_default()
+        .unwrap()
+        .list_audit(10)
+        .unwrap();
+    let kinds: Vec<_> = audit.iter().map(|r| r.event_type.as_str()).collect();
+    assert_eq!(kinds, ["host_key_deleted", "host_key_approved"]);
+    assert!(audit[1].detail.as_deref().unwrap_or("").contains(&fp));
+    assert!(audit.iter().all(|r| r.username.as_deref() == Some("local")));
     set_config_path_override(None);
 }

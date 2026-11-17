@@ -4,13 +4,16 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use rust_sql::common::event::*;
 use rust_sql::common::types::{Password, Server, SslConfig};
+use rust_sql::core::appdb::AppDb;
 use rust_sql::core::config::{self, set_config_path_override};
+use rust_sql::core::keys::{InMemoryKeyProvider, SharedKeyProvider};
 use rust_sql::core::servers;
 use rust_sql::gui::{ServerFormDraft, SettingsFormDraft};
 use rust_sql::state::{AppStore, DbObjectType, ScriptActionType};
 use rust_sql::tui::{DatabaseFocus, TuiApp, TuiRoute};
-use rust_sql::web::{dispatch_ipc_event, IpcRequest, WebIpcState};
+use rust_sql::web::{dispatch_ipc_event, IpcCtx, IpcRequest, WebApp, WebIpcState, WebSettings};
 use std::path::Path;
+use std::sync::Arc;
 use tempfile::TempDir;
 
 /// Verifies server CRUD, secret encryption, `AppStore` actions, read-only guardrails, parameter binding, ERD generation, and Web IPC.
@@ -20,8 +23,8 @@ async fn test_servers_crud_state_store_ipc_and_tui() {
     let cfg_path = tmp.path().join("rust-sql.json");
     set_config_path_override(Some(cfg_path.clone()));
 
-    let secret = "CHK`Ya91Hs{me!^8ndwPPaPPxwQ}`";
-    config::prepare_sync(secret).expect("prepare_sync");
+    let keys = Arc::new(InMemoryKeyProvider::new_for_tests());
+    config::prepare_sync(&*keys).expect("prepare_sync");
 
     let new_srv = Server {
         id: String::new(),
@@ -36,13 +39,13 @@ async fn test_servers_crud_state_store_ipc_and_tui() {
         ..Default::default()
     };
 
-    let added = servers::add(&new_srv, secret).await.expect("add server");
+    let added = servers::add(&new_srv, &*keys).await.expect("add server");
     assert!(added.validation_errors.is_none());
     let created = added.data.expect("created server");
     assert!(!created.id.is_empty());
     assert_eq!(created.encrypted, Some(true));
 
-    let dec = servers::decrypt_secrets(&created, secret).expect("decrypt");
+    let dec = servers::decrypt_secrets(&created, &*keys).expect("decrypt");
     assert_eq!(dec.password, Some(Password::Plain("password".into())));
 
     let draft = ServerFormDraft::from_server(Some(&dec));
@@ -51,6 +54,7 @@ async fn test_servers_crud_state_store_ipc_and_tui() {
     assert_eq!(converted.client, "mysql");
 
     let mut store = AppStore::new();
+    store.keys = SharedKeyProvider(keys.clone());
     store.load_config().expect("load_config");
     assert_eq!(store.servers.items.len(), 1);
 
@@ -132,9 +136,24 @@ async fn test_servers_crud_state_store_ipc_and_tui() {
     assert!(erd.contains("erDiagram"));
     assert!(erd.contains("document"));
 
-    let ipc_state = WebIpcState::default();
+    let app = WebApp::new(
+        AppDb::open(&tmp.path().join("rust-sql.db")).expect("app db"),
+        keys.clone(),
+        WebSettings::loopback_for_tests(8080),
+    );
+    let admin = app
+        .db
+        .create_user("admin", "correct horse battery", true)
+        .expect("admin");
+    let ipc_state = WebIpcState::new(4);
+    let ctx = IpcCtx {
+        app: &app,
+        session: &ipc_state,
+        user: &admin,
+        source_ip: None,
+    };
     let clients_resp = dispatch_ipc_event(
-        &ipc_state,
+        &ctx,
         IpcRequest {
             event: DB_GET_CLIENTS_SYNC.to_string(),
             args: vec![],
@@ -144,7 +163,7 @@ async fn test_servers_crud_state_store_ipc_and_tui() {
     assert!(clients_resp.ok);
 
     let servers_resp = dispatch_ipc_event(
-        &ipc_state,
+        &ctx,
         IpcRequest {
             event: SERVERS_GET_ALL.to_string(),
             args: vec![],

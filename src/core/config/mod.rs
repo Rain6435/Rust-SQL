@@ -11,12 +11,9 @@ pub use sanitize::{
 };
 
 use crate::common::types::{BaseConfig, Config, ConfigFile};
+use crate::core::keys::KeyProvider;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
-
-/// Default runtime secret key used to derive the 32-byte AES-256-CBC key for saved passwords.
-pub const DEFAULT_CRYPTO_SECRET: &str =
-    "j[F6Y6NoWT}+YG|4c|-<89:ByJ83-9Aj?O8>$Zk/[WFk_~gFbg7<wm+*V|A{xQZ,";
 
 /// Serializes unit tests that read or write the process-wide configuration file or its path
 /// override, so one test cannot truncate or overwrite another's config mid-test.
@@ -87,7 +84,9 @@ pub fn get_config_path() -> PathBuf {
 }
 
 /// Synchronously ensures the configuration file exists on disk and sanitizes/encrypts all server entries.
-pub fn prepare_sync(crypto_secret: &str) -> Result<(), String> {
+///
+/// The master key is requested from `keys` only if a plaintext password must be encrypted.
+pub fn prepare_sync(keys: &dyn KeyProvider) -> Result<(), String> {
     let filename = get_config_path();
     if !filename.exists() {
         if let Some(parent) = filename.parent() {
@@ -97,14 +96,14 @@ pub fn prepare_sync(crypto_secret: &str) -> Result<(), String> {
     }
 
     let mut result: ConfigFile = read_json_file_sync(&filename)?;
-    result.servers = sanitize_servers(&result, crypto_secret)?;
+    result.servers = sanitize_servers(&result, keys)?;
     write_json_file_sync(&filename, &result)?;
     Ok(())
 }
 
 /// Asynchronously prepares and sanitizes the configuration file on disk.
-pub async fn prepare(crypto_secret: &str) -> Result<(), String> {
-    prepare_sync(crypto_secret)
+pub async fn prepare(keys: &dyn KeyProvider) -> Result<(), String> {
+    prepare_sync(keys)
 }
 
 /// Returns the resolved absolute path of the active configuration file as a string.

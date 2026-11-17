@@ -97,7 +97,7 @@ the bastion and private hosts work. It never connects to the database directly.
 
 1. **Native Desktop GUI (`--gui`)**: Powered by `eframe` / `egui` ([src/gui/mod.rs](src/gui/mod.rs)).
 2. **Terminal UI (`--tui` / `--term`)**: Powered by `ratatui` + `crossterm` ([src/tui/mod.rs](src/tui/mod.rs)).
-3. **Web GUI & IPC Server (`--web --port 8080`)**: Powered by `axum` ([src/web/mod.rs](src/web/mod.rs)), serving the Rust-SQL web interface and implementing all IPC events from [src/common/event.rs](src/common/event.rs).
+3. **Multi-user Web UI (`--web`)**: Powered by `axum` ([src/web/mod.rs](src/web/mod.rs)). People sign in with accounts stored in the application database and see only the saved connections they have been granted. It serves HTTPS (rustls) and refuses to start on a non-loopback address without TLS; plain HTTP is allowed only on loopback with `--insecure-http`. Sessions, CSRF tokens, login rate limiting, `Host` validation, and an audit log are built in. See [docs/app/web-server.md](docs/app/web-server.md).
 
 ---
 
@@ -113,8 +113,9 @@ cargo run -- --gui
 # Launch Terminal UI
 cargo run -- --tui
 
-# Launch Web UI Server on port 8080
-cargo run -- --web --port 8080
+# Create the first web administrator, then launch the Web UI (development: plain HTTP on loopback)
+cargo run -- users create --admin --username admin
+cargo run -- --web --insecure-http --port 8080
 
 # Execute a headless batch query and format as Markdown
 cargo run -- --uri "postgres://localhost:5432/rust_sql" -e "SELECT * FROM users" --format markdown
@@ -126,7 +127,9 @@ cargo run -- --uri "postgres://localhost:5432/rust_sql" --erd
 ### Docker
 
 ```bash
-# Build and run the Web UI container + local test databases
+# The container binds 0.0.0.0, so it needs TLS configured in /data/rust-sql.json
+# (web.tlsCertPath / web.tlsKeyPath) and an administrator account:
+docker compose run --rm rust-sql-web users create --admin --username admin
 docker compose up --build
 ```
 

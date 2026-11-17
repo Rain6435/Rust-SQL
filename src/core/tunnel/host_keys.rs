@@ -1,13 +1,15 @@
 //! Trust-on-first-use host-key verification with a 180-day re-confirmation timer.
 //!
 //! Pins live in the `sshHostKeys` list of the configuration store. That store is not encrypted
-//! yet; Workstream 4 moves it into the encrypted store, and Workstream 3 adds the audit table.
-//! Until then approvals and deletions are logged with `log::warn!` under the `audit` target.
+//! yet; Workstream 4 moves it into the encrypted store. Every approval and deletion is written
+//! to the `audit_events` table of the application database; if that write fails, the call
+//! returns an error.
 
 use super::error::TunnelError;
 use crate::common::types::{
     HostKeyChallenge, HostKeyChallengeKind, SshHostKeyPin, HOST_KEY_RECONFIRM_AFTER_DAYS,
 };
+use crate::core::appdb::{AppDb, AuditActor, AuditEvent, AuditKind};
 use crate::core::config;
 use time::{Duration, OffsetDateTime};
 
@@ -156,8 +158,33 @@ pub fn load_pins() -> Result<Vec<SshHostKeyPin>, TunnelError> {
         .ssh_host_keys)
 }
 
-/// Persists the user's approval (or re-confirmation) of `challenge`.
+fn audit(db: Option<&AppDb>, event: AuditEvent) -> Result<(), TunnelError> {
+    let result = match db {
+        Some(db) => db.record_audit(&event),
+        None => crate::core::appdb::audit::record_to_default_db(&event),
+    };
+    result.map_err(|e| TunnelError::PinStore(format!("audit log write failed: {e}")))
+}
+
+/// Persists the local user's approval (or re-confirmation) of `challenge` and audits it.
 pub fn approve_host_key(challenge: &HostKeyChallenge) -> Result<(), TunnelError> {
+    approve_host_key_inner(challenge, None, &AuditActor::local())
+}
+
+/// Persists `actor`'s approval of `challenge`, auditing it in `db`.
+pub fn approve_host_key_audited(
+    challenge: &HostKeyChallenge,
+    db: &AppDb,
+    actor: &AuditActor,
+) -> Result<(), TunnelError> {
+    approve_host_key_inner(challenge, Some(db), actor)
+}
+
+fn approve_host_key_inner(
+    challenge: &HostKeyChallenge,
+    db: Option<&AppDb>,
+    actor: &AuditActor,
+) -> Result<(), TunnelError> {
     let mut file = config::get_sync().map_err(TunnelError::PinStore)?;
     apply_approval(
         &mut file.ssh_host_keys,
@@ -165,27 +192,50 @@ pub fn approve_host_key(challenge: &HostKeyChallenge) -> Result<(), TunnelError>
         OffsetDateTime::now_utc(),
     )?;
     config::save_sync(&file).map_err(TunnelError::PinStore)?;
-    log::warn!(
-        target: "audit",
-        "ssh host key approved ({:?}): {}:{} {} {}",
+    let detail = format!(
+        "{:?} {}:{} {} {}",
         challenge.kind,
         challenge.host,
         challenge.port,
         challenge.key_algorithm,
         challenge.fingerprint_sha256
     );
-    Ok(())
+    audit(
+        db,
+        AuditEvent::new(AuditKind::HostKeyApproved, actor).detail(detail),
+    )
 }
 
-/// Deletes the pin for `host:port`. Returns whether a pin was removed.
+/// Deletes the pin for `host:port` on behalf of the local user. Returns whether one was removed.
 pub fn delete_host_key(host: &str, port: u32) -> Result<bool, TunnelError> {
+    delete_host_key_inner(host, port, None, &AuditActor::local())
+}
+
+/// Deletes the pin for `host:port` on behalf of `actor`, auditing it in `db`.
+pub fn delete_host_key_audited(
+    host: &str,
+    port: u32,
+    db: &AppDb,
+    actor: &AuditActor,
+) -> Result<bool, TunnelError> {
+    delete_host_key_inner(host, port, Some(db), actor)
+}
+
+fn delete_host_key_inner(
+    host: &str,
+    port: u32,
+    db: Option<&AppDb>,
+    actor: &AuditActor,
+) -> Result<bool, TunnelError> {
     let mut file = config::get_sync().map_err(TunnelError::PinStore)?;
     let before = file.ssh_host_keys.len();
     file.ssh_host_keys.retain(|p| !same_endpoint(p, host, port));
     let removed = file.ssh_host_keys.len() != before;
     if removed {
         config::save_sync(&file).map_err(TunnelError::PinStore)?;
-        log::warn!(target: "audit", "ssh host key pin deleted: {host}:{port}");
+        let event =
+            AuditEvent::new(AuditKind::HostKeyDeleted, actor).detail(format!("{host}:{port}"));
+        audit(db, event)?;
     }
     Ok(removed)
 }

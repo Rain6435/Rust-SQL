@@ -1,7 +1,15 @@
-//! Web IPC handlers for query execution, script generation, and file/clipboard exports.
+//! Web IPC handlers for query execution, script generation, and exports.
+//!
+//! Every event that touches the open connection re-checks the caller's grant. Statement
+//! execution is audited without the query text. Events that read or write the server's file
+//! system or change process-wide limits require an administrator, and exports never touch
+//! the server's clipboard.
 
 use crate::common::event::*;
-use crate::web::{str_arg, IpcResponse, WebIpcState};
+use crate::core::export::export_query_result_to_string;
+use crate::web::ipc_policy::{QUERY_ADMIN_EVENTS, QUERY_CONNECTION_EVENTS};
+use crate::web::query_audit::{audit_query_results, audit_statement};
+use crate::web::{str_arg, IpcCtx, IpcResponse};
 use serde_json::{Map, Value};
 
 fn db_table_schema(args: &[Value]) -> (String, String, Option<String>) {
@@ -14,10 +22,23 @@ fn db_table_schema(args: &[Value]) -> (String, String, Option<String>) {
 
 /// Handles query execution, script generation, and export IPC events, returning `None` if unhandled.
 pub async fn handle_db_queries_ipc(
-    state: &WebIpcState,
+    ctx: &IpcCtx<'_>,
     event: &str,
     args: &[Value],
 ) -> Option<IpcResponse> {
+    let mut conn_id = String::new();
+    if QUERY_CONNECTION_EVENTS.contains(&event) {
+        match ctx.require_connected() {
+            Ok(id) => conn_id = id,
+            Err(r) => return Some(r),
+        }
+    }
+    if QUERY_ADMIN_EVENTS.contains(&event) {
+        if let Err(r) = ctx.require_admin(event) {
+            return Some(r);
+        }
+    }
+    let state = ctx.session;
     let resp = match event {
         DB_CREATE_CANCELLABLE_QUERY => {
             let database = str_arg(args, 0).unwrap_or_default();
@@ -40,7 +61,9 @@ pub async fn handle_db_queries_ipc(
         DB_EXECUTE_CANCELLABLE_QUERY => {
             let query_id = args.first().and_then(|v| v.as_u64()).unwrap_or(1);
             let mut db = state.db.lock().await;
-            match db.execute_cancellable_query(query_id).await {
+            let result = db.execute_cancellable_query(query_id).await;
+            audit_query_results(ctx, &conn_id, &result);
+            match result {
                 Ok(res) => IpcResponse::success(res),
                 Err(e) => IpcResponse::err(e),
             }
@@ -49,7 +72,9 @@ pub async fn handle_db_queries_ipc(
             let database = str_arg(args, 0).unwrap_or_default();
             let query_text = str_arg(args, 1).unwrap_or_default();
             let db = state.db.lock().await;
-            match db.execute_query(&database, &query_text).await {
+            let result = db.execute_query(&database, &query_text).await;
+            audit_query_results(ctx, &conn_id, &result);
+            match result {
                 Ok(res) => IpcResponse::success(res),
                 Err(e) => IpcResponse::err(e),
             }
@@ -152,7 +177,9 @@ pub async fn handle_db_queries_ipc(
             let database = str_arg(args, 0).unwrap_or_default();
             let schema = str_arg(args, 1);
             let db = state.db.lock().await;
-            match db.truncate_all_tables(&database, schema.as_deref()).await {
+            let result = db.truncate_all_tables(&database, schema.as_deref()).await;
+            audit_statement(ctx, &conn_id, "TRUNCATE_ALL_TABLES", result.is_ok());
+            match result {
                 Ok(()) => IpcResponse::success(Value::Null),
                 Err(e) => IpcResponse::err(e),
             }
@@ -181,8 +208,7 @@ pub async fn handle_db_queries_ipc(
                 .unwrap_or_default();
             let export_type = str_arg(args, 1).unwrap_or_else(|| "CSV".to_string());
             let delimiter = str_arg(args, 2);
-            let db = state.db.lock().await;
-            match db.export_query_result_to_clipboard(&rows, &export_type, delimiter.as_deref()) {
+            match export_query_result_to_string(&rows, &export_type, delimiter.as_deref()) {
                 Ok(txt) => IpcResponse::success(txt),
                 Err(e) => IpcResponse::err(e),
             }

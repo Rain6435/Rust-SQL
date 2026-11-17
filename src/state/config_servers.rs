@@ -66,7 +66,6 @@ impl AppStore {
             return Ok(());
         };
 
-        let secret = self.crypto_secret();
         let Some(srv) = self
             .servers
             .items
@@ -76,7 +75,7 @@ impl AppStore {
         else {
             return Err("Server not found".to_string());
         };
-        let decrypted = servers::decrypt_secrets(&srv, &secret)?;
+        let decrypted = servers::decrypt_secrets(&srv, self.key_provider())?;
         self.servers.is_saving = false;
         self.servers.is_editing = true;
         self.servers.editing_server = Some(decrypted);
@@ -103,8 +102,7 @@ impl AppStore {
         if let Some(existing_id) = id {
             server.id = existing_id.to_string();
         }
-        let secret = self.crypto_secret();
-        match servers::add_or_update_sync(&server, &secret) {
+        match servers::add_or_update_sync(&server, self.key_provider()) {
             Ok(res) => {
                 if let Some(errs) = res.validation_errors {
                     self.servers.error = Some(errs.clone());

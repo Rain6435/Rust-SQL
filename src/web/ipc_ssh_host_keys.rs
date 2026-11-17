@@ -2,13 +2,15 @@
 //!
 //! `DB_CONNECT` answers an unknown or expiring bastion key with an error carrying
 //! `hostKeyChallenge`. Only a challenge the server actually issued can be approved, so a client
-//! cannot pin an arbitrary fingerprint. A changed key never produces a challenge.
+//! cannot pin an arbitrary fingerprint. Challenges are per session, so one user cannot approve
+//! a key presented to another. A changed key never produces a challenge. Deleting a pin
+//! requires an administrator. Approvals and deletions are written to the audit log.
 
 use crate::common::event::{SSH_HOST_KEYS_LIST, SSH_HOST_KEY_APPROVE, SSH_HOST_KEY_DELETE};
 use crate::common::types::HostKeyChallenge;
 use crate::core::errors::DbCoreError;
 use crate::core::tunnel;
-use crate::web::{str_arg, IpcResponse, WebIpcState};
+use crate::web::{str_arg, IpcCtx, IpcResponse, WebIpcState};
 use serde_json::{json, Value};
 
 /// Builds the error response for a failed connect, attaching any host-key challenge.
@@ -28,10 +30,11 @@ pub async fn connect_error_response(state: &WebIpcState, err: DbCoreError) -> Ip
 
 /// Handles host-key IPC events, returning `None` if `event` is unhandled.
 pub async fn handle_ssh_host_keys_ipc(
-    state: &WebIpcState,
+    ctx: &IpcCtx<'_>,
     event: &str,
     args: &[Value],
 ) -> Option<IpcResponse> {
+    let state = ctx.session;
     let resp = match event {
         SSH_HOST_KEY_APPROVE => {
             let challenge: HostKeyChallenge =
@@ -45,7 +48,7 @@ pub async fn handle_ssh_host_keys_ipc(
                     "This host key was not presented by a connection attempt; connect first",
                 ));
             };
-            match tunnel::approve_host_key(&challenge) {
+            match tunnel::approve_host_key_audited(&challenge, &ctx.app.db, &ctx.actor()) {
                 Ok(()) => {
                     pending.remove(idx);
                     IpcResponse::success(Value::Null)
@@ -58,12 +61,15 @@ pub async fn handle_ssh_host_keys_ipc(
             Err(e) => IpcResponse::err(e.to_string()),
         },
         SSH_HOST_KEY_DELETE => {
+            if let Err(r) = ctx.require_admin(event) {
+                return Some(r);
+            }
             let host = str_arg(args, 0).unwrap_or_default();
             let port = args.get(1).and_then(Value::as_u64).unwrap_or(22);
             let Ok(port) = u32::try_from(port) else {
                 return Some(IpcResponse::err("Invalid port"));
             };
-            match tunnel::delete_host_key(&host, port) {
+            match tunnel::delete_host_key_audited(&host, port, &ctx.app.db, &ctx.actor()) {
                 Ok(removed) => IpcResponse::success(json!({ "removed": removed })),
                 Err(e) => IpcResponse::err(e.to_string()),
             }
@@ -81,7 +87,14 @@ mod tests {
 
     #[tokio::test]
     async fn approve_refuses_a_challenge_the_server_never_issued() {
-        let state = WebIpcState::default();
+        let (_dir, app, user) = crate::web::state::test_app();
+        let state = WebIpcState::new(4);
+        let ctx = IpcCtx {
+            app: &app,
+            session: &state,
+            user: &user,
+            source_ip: None,
+        };
         let forged = HostKeyChallenge {
             kind: HostKeyChallengeKind::Unknown,
             host: "bastion".into(),
@@ -90,7 +103,7 @@ mod tests {
             fingerprint_sha256: "SHA256:attacker".into(),
         };
         let resp =
-            handle_ssh_host_keys_ipc(&state, SSH_HOST_KEY_APPROVE, &[to_value(&forged).unwrap()])
+            handle_ssh_host_keys_ipc(&ctx, SSH_HOST_KEY_APPROVE, &[to_value(&forged).unwrap()])
                 .await
                 .unwrap();
         assert!(!resp.ok);
@@ -99,7 +112,7 @@ mod tests {
 
     #[tokio::test]
     async fn connect_error_carries_challenge_and_records_it() {
-        let state = WebIpcState::default();
+        let state = WebIpcState::new(4);
         let challenge = HostKeyChallenge {
             kind: HostKeyChallengeKind::Unknown,
             host: "bastion".into(),

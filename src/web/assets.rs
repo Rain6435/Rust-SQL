@@ -1,4 +1,8 @@
 //! Embedded single-page HTML/JS frontend served at `/` by the `--web` server.
+//!
+//! The page signs in through `/api/login`, keeps the CSRF token in memory only, and sends it
+//! as `X-CSRF-Token` on every IPC call. It connects by saved connection ID and never sees a
+//! password. Values from the server or the database are inserted as text, never as HTML.
 
 /// Single-page application HTML/JS bundle communicating with `/api/ipc`.
 pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
@@ -31,7 +35,7 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
   <header>
     <div><strong>Rust-SQL</strong></div>
     <div id="breadcrumb">servers</div>
-    <div id="conn-actions"></div>
+    <div id="conn-actions"><span id="whoami"></span> <button id="logout-btn" hidden>Sign out</button></div>
   </header>
   <div id="emulated-banner" class="emulated-banner" data-testid="emulated-banner" hidden></div>
   <div id="main-area">
@@ -42,13 +46,20 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
     <span>Rust-SQL v1.39.0</span>
   </footer>
   <script>
-    async function ipc(event, ...args) {
-      const res = await fetch('/api/ipc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event, args })
+    let csrfToken = null;
+
+    async function post(path, body) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+      const res = await fetch(path, {
+        method: 'POST', credentials: 'same-origin', headers, body: JSON.stringify(body)
       });
-      const json = await res.json();
+      if (res.status === 401 && path !== '/api/login') { showLogin('Your session ended. Sign in again.'); }
+      return res.json();
+    }
+
+    async function ipc(event, ...args) {
+      const json = await post('/api/ipc', { event, args });
       if (!json.ok) {
         const err = new Error(json.error || 'IPC Error');
         err.hostKeyChallenge = json.hostKeyChallenge || null;
@@ -67,21 +78,59 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
       el.hidden = !emulatedBanner;
     }
 
-    async function loadServers() {
-      const cfg = await ipc('CONFIG_GET_FULL', true);
+    function el(tag, attrs, text) {
+      const e = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+      if (text !== undefined) e.textContent = text;
+      return e;
+    }
+
+    function setSession(data) {
+      csrfToken = data ? data.csrfToken : null;
+      document.getElementById('whoami').textContent = data ? data.username : '';
+      document.getElementById('logout-btn').hidden = !data;
+    }
+
+    function showLogin(message) {
+      setSession(null);
       const container = document.getElementById('main-area');
-      container.innerHTML = '<div id="server-list"></div>';
+      container.replaceChildren();
+      const form = el('form', { id: 'login-form', style: 'margin:48px auto;display:flex;flex-direction:column;gap:8px;width:280px' });
+      form.append(el('strong', {}, 'Sign in to Rust-SQL'), el('div', { id: 'login-error', style: 'color:#b91c1c' }, message || ''),
+        el('input', { id: 'login-user', autocomplete: 'username', placeholder: 'Username' }),
+        el('input', { id: 'login-pass', type: 'password', autocomplete: 'current-password', placeholder: 'Password' }),
+        el('button', { class: 'primary', type: 'submit' }, 'Sign in'));
+      form.onsubmit = async (ev) => {
+        ev.preventDefault();
+        const json = await post('/api/login', {
+          username: document.getElementById('login-user').value,
+          password: document.getElementById('login-pass').value
+        });
+        if (!json.ok) { document.getElementById('login-error').textContent = json.error; return; }
+        setSession(json.data);
+        loadServers();
+      };
+      container.appendChild(form);
+    }
+
+    document.getElementById('logout-btn').onclick = async () => {
+      await post('/api/logout', {});
+      showLogin('Signed out.');
+    };
+
+    async function loadServers() {
+      const servers = await ipc('SERVERS_GET_ALL');
+      const container = document.getElementById('main-area');
+      container.replaceChildren(el('div', { id: 'server-list' }));
       const list = document.getElementById('server-list');
-      for (const srv of cfg.servers) {
+      if (!servers.length) list.appendChild(el('div', {}, 'No saved connections have been shared with you.'));
+      for (const srv of servers) {
         const meta = srv.host ? `${srv.host}:${srv.port || ''}` : (srv.socketPath || srv.database || '');
-        const card = document.createElement('div');
-        card.className = 'server-card';
-        card.innerHTML = `
-          <div data-testid="server-name" style="font-weight:bold">${srv.name}</div>
-          <div data-testid="server-meta" style="color:#64748b;font-size:12px">${meta}</div>
-          <button class="primary" data-testid="connect-button">Connect</button>
-        `;
-        card.querySelector('[data-testid="connect-button"]').onclick = () => connectServer(srv, cfg.crypto.secret);
+        const card = el('div', { class: 'server-card' });
+        const btn = el('button', { class: 'primary', 'data-testid': 'connect-button' }, 'Connect');
+        card.append(el('div', { 'data-testid': 'server-name', style: 'font-weight:bold' }, srv.name),
+          el('div', { 'data-testid': 'server-meta', style: 'color:#64748b;font-size:12px' }, meta), btn);
+        btn.onclick = () => connectServer(srv);
         list.appendChild(card);
       }
     }
@@ -90,7 +139,7 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
     async function connectWithHostKeyCheck(srv, db) {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          return await ipc('DB_CONNECT', srv, db);
+          return await ipc('DB_CONNECT', srv.id, db);
         } catch (err) {
           const ch = err.hostKeyChallenge;
           if (!ch || attempt > 0) throw err;
@@ -102,16 +151,15 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
       }
     }
 
-    async function connectServer(srv, secret) {
-      const dec = await ipc('SERVERS_DECRYPT_SECRETS', srv, secret);
-      const db = dec.database || ':memory:';
+    async function connectServer(srv) {
+      const db = srv.database || ':memory:';
       setConnectionMode(null);
-      setConnectionMode(await connectWithHostKeyCheck(dec, db));
+      setConnectionMode(await connectWithHostKeyCheck(srv, db));
       const tables = await ipc('DB_LIST_TABLES', db);
       const container = document.getElementById('main-area');
       container.innerHTML = `
         <div id="sidebar">
-          <div data-testid="db-header" style="font-weight:bold;margin-bottom:8px">${db}</div>
+          <div data-testid="db-header" style="font-weight:bold;margin-bottom:8px"></div>
           <div id="table-items"></div>
         </div>
         <div id="workspace" class="react-tabs__tab-panel react-tabs__tab-panel--selected">
@@ -120,13 +168,14 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
           <div id="query-result"></div>
         </div>
       `;
+      container.querySelector('[data-testid="db-header"]').textContent = db;
       const tblContainer = document.getElementById('table-items');
       for (const t of tables) {
         const item = document.createElement('div');
         item.setAttribute('data-testid', 'db-item-Table');
         item.style.cursor = 'pointer';
         item.style.padding = '4px 0';
-        item.innerHTML = `<span>${t.name}</span>`;
+        item.appendChild(el('span', {}, t.name));
         item.querySelector('span').onclick = async () => {
           const sql = await ipc('DB_GET_QUERY_SELECT_TOP', db, t.name);
           document.getElementById('editor-box').innerText = sql;
@@ -172,7 +221,9 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
       }
     }
 
-    loadServers();
+    fetch('/api/session', { credentials: 'same-origin' }).then(r => r.json()).then(json => {
+      if (json.ok) { setSession(json.data); loadServers(); } else { showLogin(''); }
+    });
   </script>
 </body>
 </html>

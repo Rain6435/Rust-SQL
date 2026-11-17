@@ -20,6 +20,16 @@ You can also override the configuration directory via the `$RUST_SQL_HOME` envir
   "connectionsAsList": false,
   "customFont": "Lato",
   "emulateUnsupportedDialects": false,
+  "web": {
+    "bindAddress": "127.0.0.1",
+    "port": 8080,
+    "tlsCertPath": "/etc/rust-sql/fullchain.pem",
+    "tlsKeyPath": "/etc/rust-sql/privkey.pem",
+    "allowInsecureHttp": false,
+    "allowedHosts": ["127.0.0.1:8080"],
+    "sessionTtlHours": 12,
+    "maxConcurrentRequestsPerSession": 8
+  },
   "log": {
     "console": true,
     "file": true,
@@ -77,3 +87,11 @@ to them fails with a "not implemented" error. Setting this to `true` (or startin
 `--emulate`) lets those dialects run on an in-memory emulator instead. Emulated results are **not
 from your server**, and every front end labels them "EMULATED — results are not from your
 server." This setting has no effect on PostgreSQL, Redshift, or SQLite, which always connect live.
+
+### `web`
+
+Settings for the multi-user web UI; see [web-server.md](web-server.md). Every field is optional.
+`--port` and `--bind` override `port` and `bindAddress`. A non-loopback `bindAddress` requires
+both `tlsCertPath` and `tlsKeyPath`. `allowInsecureHttp` (or `--insecure-http`) permits plain
+HTTP on loopback for development only. Web accounts, sessions, grants and the audit log are
+stored in `rust-sql.db` next to this file, never in it.
