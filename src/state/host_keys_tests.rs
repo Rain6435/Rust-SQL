@@ -11,8 +11,17 @@ fn approve_without_prompt_is_an_error() {
     assert!(store.approve_host_key().is_err());
 }
 
-#[tokio::test]
-async fn test_connection_prompts_then_approval_pins_the_key() {
+#[test]
+fn test_connection_prompts_then_approval_pins_the_key() {
+    // Hold the config lock for the whole test: TuiApp::new in other tests writes the config file.
+    let _cfg = config::TEST_CONFIG_LOCK
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(prompt_then_approval());
+}
+
+async fn prompt_then_approval() {
     let host_key = test_key(42);
     let fp = fingerprint(&host_key);
     let (ssh_port, state) = spawn_bastion(host_key, "pw-for-store", None).await;

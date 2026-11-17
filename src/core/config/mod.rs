@@ -18,6 +18,11 @@ use std::sync::{Mutex, OnceLock};
 pub const DEFAULT_CRYPTO_SECRET: &str =
     "j[F6Y6NoWT}+YG|4c|-<89:ByJ83-9Aj?O8>$Zk/[WFk_~gFbg7<wm+*V|A{xQZ,";
 
+/// Serializes unit tests that read or write the process-wide configuration file or its path
+/// override, so one test cannot truncate or overwrite another's config mid-test.
+#[cfg(test)]
+pub(crate) static TEST_CONFIG_LOCK: Mutex<()> = Mutex::new(());
+
 pub(crate) static CONFIG_CACHE: OnceLock<Mutex<Option<Config>>> = OnceLock::new();
 static OVERRIDE_CONFIG_PATH: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
 

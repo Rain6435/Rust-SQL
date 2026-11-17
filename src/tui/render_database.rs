@@ -183,6 +183,9 @@ mod tests {
     use ratatui::{backend::TestBackend, layout::Rect, Terminal};
 
     fn rendered_text(mode: Option<ConnectionMode>) -> String {
+        let _cfg = crate::core::config::TEST_CONFIG_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let mut app = TuiApp::new();
         app.store.connections.mode = mode;
         let mut terminal = Terminal::new(TestBackend::new(120, 20)).expect("terminal");
