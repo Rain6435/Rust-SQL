@@ -141,7 +141,7 @@ async fn real_postgres_returns_live_rows_and_metadata() {
     srv.database = Some(database.clone());
 
     let mut bad = srv.clone();
-    bad.password = Some(Password::Plain("definitely-wrong-password".into()));
+    bad.password = Some(Password::plain("definitely-wrong-password"));
     let mut bad_session = create_server(bad).expect("create_server");
     let bad_conn = bad_session.create_connection(Some(&database));
     let bad_msg = bad_conn

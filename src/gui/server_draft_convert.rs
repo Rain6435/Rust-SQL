@@ -48,7 +48,7 @@ impl ServerFormDraft {
                 {
                     None
                 } else {
-                    Some(Password::Plain(self.ssh_password.trim().to_string()))
+                    Some(Password::plain(self.ssh_password.trim().to_string()))
                 },
                 passphrase: None,
                 private_key: if self.ssh_private_key.trim().is_empty() || self.ssh_use_agent {
@@ -114,12 +114,11 @@ impl ServerFormDraft {
             local_host: None,
             local_port: None,
             user: opt_str(&self.user, "server:user"),
-            password: opt_str(&self.password, "server:password").map(Password::Plain),
+            password: opt_str(&self.password, "server:password").map(Password::plain),
             application_name: None,
             domain: opt_str(&self.domain, "server:domain"),
             ssh,
             ssl: (!disabled.contains("server:ssl")).then_some(SslConfig::Bool(self.ssl)),
-            encrypted: None,
             database: {
                 let d = self.database.trim();
                 (!d.is_empty()).then(|| d.to_string())

@@ -47,7 +47,6 @@ impl From<&Server> for PublicServer {
             ..Default::default()
         };
         server.password = None;
-        server.encrypted = None;
         server.local_host = None;
         server.local_port = None;
         if let Some(ssh) = server.ssh.as_mut() {
@@ -82,15 +81,13 @@ mod tests {
             id: "c1".into(),
             name: "prod".into(),
             password: Some(Password::Encrypted(EncryptedPassword {
-                iv_text: "IVIVIV".into(),
-                encrypted_text: "CIPHERTEXT".into(),
+                ciphertext: "v2:CIPHERTEXT".into(),
             })),
-            encrypted: Some(true),
             ssh: Some(SshConfig {
                 user: "u".into(),
                 host: "bastion".into(),
                 port: 22,
-                password: Some(Password::Plain("ssh-plain-secret".into())),
+                password: Some(Password::plain("ssh-plain-secret")),
                 passphrase: Some("key-passphrase".into()),
                 private_key: Some("/home/u/.ssh/id_ed25519".into()),
                 ..Default::default()
@@ -104,7 +101,6 @@ mod tests {
         let json = serde_json::to_string(&PublicServer::from(&srv)).unwrap();
         for secret in [
             "CIPHERTEXT",
-            "IVIVIV",
             "ssh-plain-secret",
             "key-passphrase",
             "id_ed25519",

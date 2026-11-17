@@ -190,10 +190,14 @@ pub async fn run_web_server(opts: WebLaunchOptions) -> Result<(), String> {
             db.path().display()
         ));
     }
+    // The OS keychain is mandatory: without the master key the server could neither store
+    // nor use saved credentials, so it refuses to start instead of running degraded.
     let keys = system_key_provider();
-    if let Err(e) = keys.master_key() {
-        eprintln!("Warning: {e}");
-    }
+    keys.master_key().map_err(|e| {
+        format!(
+            "{e}\nThe web server needs the OS keychain master key and will not start without it."
+        )
+    })?;
     if let Some(tls) = &settings.tls {
         load_tls_config(&tls.cert, &tls.key)?;
     }

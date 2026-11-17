@@ -28,7 +28,7 @@ fn tunneled_server(bastion: &str, ssh_password: &str) -> Server {
         ),
         database: Some(env("RUST_SQL_TEST_PG_DB", "rust_sql")),
         user: Some(env("RUST_SQL_TEST_PG_USER", "postgres")),
-        password: Some(Password::Plain(env(
+        password: Some(Password::plain(env(
             "RUST_SQL_TEST_PG_PASSWORD",
             "password",
         ))),

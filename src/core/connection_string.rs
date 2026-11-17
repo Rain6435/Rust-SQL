@@ -28,7 +28,7 @@ pub fn parse_connection_uri(uri: &str, existing: Option<&Server>) -> Option<Serv
     }
 
     if let Some(pass) = parsed.password() {
-        srv.password = Some(Password::Plain(urlencoding_decode(pass)));
+        srv.password = Some(Password::plain(urlencoding_decode(pass)));
     }
 
     if let Some(host) = parsed.host_str() {
@@ -93,14 +93,11 @@ pub fn build_connection_uri(server: &Server, show_plain_password: bool) -> Strin
         uri.push_str(u);
         if let Some(pw) = &server.password {
             if !pw.is_empty() {
-                let raw_pw = match pw {
-                    Password::Plain(s) => s.clone(),
-                    Password::Encrypted(e) => e.encrypted_text.clone(),
-                };
-                let formatted_pw = if show_plain_password {
-                    raw_pw
-                } else {
-                    "*".repeat(raw_pw.len())
+                // Ciphertext is never shown, not even when plaintext display is requested.
+                let formatted_pw = match pw {
+                    Password::Plain(s) if show_plain_password => s.to_string(),
+                    Password::Plain(s) => "*".repeat(s.chars().count()),
+                    Password::Encrypted(_) => "********".to_string(),
                 };
                 uri.push(':');
                 uri.push_str(&formatted_pw);
@@ -159,7 +156,7 @@ mod tests {
             parse_connection_uri("postgres://admin:secret@localhost:5432/mydb", None).unwrap();
         assert_eq!(srv.client, "postgresql");
         assert_eq!(srv.user.as_deref(), Some("admin"));
-        assert_eq!(srv.password, Some(Password::Plain("secret".to_string())));
+        assert_eq!(srv.password, Some(Password::plain("secret")));
         assert_eq!(srv.host.as_deref(), Some("localhost"));
         assert_eq!(srv.port, Some(5432));
         assert_eq!(srv.database.as_deref(), Some("mydb"));

@@ -1,7 +1,7 @@
 //! Database connection lifecycle, reconnection, and connection testing actions on [`AppStore`].
 
 use crate::adapters::{DatabaseFacade, CLIENTS};
-use crate::common::types::{ConnectionMode, Server, EMULATED_BANNER};
+use crate::common::types::{ConnectionMode, Password, Server, EMULATED_BANNER};
 use crate::core::servers;
 use crate::state::{
     AppStore, ColumnState, ConnectionState, DatabaseState, IndexState, QueryState, RoutineState,
@@ -92,13 +92,13 @@ impl AppStore {
 
         if !self.connections.connected {
             if let Some(ref mut ssh) = decrypted_server.ssh {
-                if ssh.private_key_with_passphrase == Some(true) {
-                    if ssh_passphrase.is_none() {
-                        self.connections.waiting_private_key_passphrase = true;
-                        self.connections.connecting = false;
-                        return Ok(());
-                    }
-                    ssh.passphrase = ssh_passphrase;
+                let saved = ssh.passphrase.as_ref().is_some_and(|p| !p.is_empty());
+                if let Some(typed) = ssh_passphrase {
+                    ssh.passphrase = Some(Password::plain(typed));
+                } else if ssh.private_key_with_passphrase == Some(true) && !saved {
+                    self.connections.waiting_private_key_passphrase = true;
+                    self.connections.connecting = false;
+                    return Ok(());
                 }
             }
         }

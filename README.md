@@ -69,6 +69,26 @@ the bastion and private hosts work. It never connects to the database directly.
 - Passwords, passphrases, key material, and the agent socket path are never included in errors
   or logs.
 
+### Saved passwords and the OS keychain
+
+Saved database passwords, SSH passwords, and SSH key passphrases are encrypted in
+`rust-sql.json` with XChaCha20-Poly1305. Each value is bound to its connection and field, so it
+cannot be copied onto another connection. The encryption key is a random 256-bit master key that
+Rust-SQL creates on first use and keeps in the operating system keychain (service `rust-sql`,
+one entry per data directory). **The keychain is required; there is no fallback.**
+
+| Platform | Keychain | Status |
+| --- | --- | --- |
+| macOS | Keychain | Supported |
+| Windows | Credential Manager | Supported |
+| Linux | Secret Service (GNOME Keyring, KWallet, KeePassXC, ...) over D-Bus | Supported |
+| Linux without a running Secret Service (headless servers, minimal containers) | None | **Unsupported** |
+
+If the keychain cannot be reached, or access is denied, Rust-SQL refuses to store or decrypt
+saved credentials and says why; connections without a saved password still work, and the web
+server refuses to start. If the keychain entry is deleted, saved passwords cannot be recovered
+and must be entered again.
+
 ---
 
 ## Core Features

@@ -39,7 +39,7 @@ async fn prompt_then_approval() {
             host: "127.0.0.1".into(),
             port: u32::from(ssh_port),
             user: "tester".into(),
-            password: Some(Password::Plain("pw-for-store".into())),
+            password: Some(Password::plain("pw-for-store")),
             ..Default::default()
         }),
         ..Default::default()

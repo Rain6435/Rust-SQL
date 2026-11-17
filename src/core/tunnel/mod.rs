@@ -171,10 +171,18 @@ pub fn config_tunnel(server_info: &Server) -> Result<TunnelConfig, TunnelError> 
         })?;
         cfg.private_key_path = Some(resolved);
         cfg.private_key_content = Some(Zeroizing::new(content));
-        cfg.passphrase = non_empty(ssh.passphrase.as_deref()).map(|p| Zeroizing::new(p.into()));
+        cfg.passphrase = match ssh.passphrase.as_ref().filter(|p| !p.is_empty()) {
+            None => None,
+            Some(Password::Plain(p)) => Some(Zeroizing::new(p.to_string())),
+            Some(Password::Encrypted(_)) => {
+                return Err(invalid(
+                    "SSH key passphrase is still encrypted; decrypt it before connecting",
+                ))
+            }
+        };
     } else if let Some(pw) = ssh.password.as_ref().filter(|p| !p.is_empty()) {
         match pw {
-            Password::Plain(plain) => cfg.password = Some(Zeroizing::new(plain.clone())),
+            Password::Plain(plain) => cfg.password = Some(Zeroizing::new(plain.to_string())),
             Password::Encrypted(_) => {
                 return Err(invalid(
                     "SSH password is still encrypted; decrypt it before connecting",

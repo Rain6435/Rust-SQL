@@ -4,6 +4,8 @@
 
 #![allow(dead_code)]
 
+pub mod fake_pg;
+
 use axum::body::Body;
 use axum::extract::connect_info::MockConnectInfo;
 use axum::http::{header, Request, StatusCode};

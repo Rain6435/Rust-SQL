@@ -60,14 +60,15 @@ fn reject_ciphertext(pw: &Option<Password>) -> Result<(), IpcResponse> {
 /// Validates a client-sent profile and fills omitted secrets from the saved record.
 fn prepare_incoming(mut srv: Server, existing: Option<&Server>) -> Result<Server, IpcResponse> {
     reject_ciphertext(&srv.password)?;
-    reject_ciphertext(&srv.ssh.as_ref().and_then(|s| s.password.clone()))?;
-    srv.encrypted = None;
+    if let Some(ssh) = srv.ssh.as_ref() {
+        reject_ciphertext(&ssh.password)?;
+        reject_ciphertext(&ssh.passphrase)?;
+    }
     srv.local_host = None;
     srv.local_port = None;
     let Some(old) = existing else {
         return Ok(srv);
     };
-    srv.encrypted = old.encrypted;
     if srv.password.is_none() {
         srv.password = old.password.clone();
     }

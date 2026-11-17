@@ -2,7 +2,7 @@
 
 pub mod secrets;
 
-pub use secrets::{decrypt_secrets, encrypt_secrets};
+pub use secrets::{decrypt_secrets, encrypt_secrets, has_plaintext_secrets};
 
 use crate::common::types::{Server, ServerResult};
 use crate::core::config;
@@ -46,8 +46,9 @@ pub fn add_sync(server: &Server, keys: &dyn KeyProvider) -> Result<ServerResult,
         }
     };
 
-    srv = encrypt_secrets(&srv, keys, None)?;
+    // The ID is part of each ciphertext's associated data, so assign it before encrypting.
     srv.id = new_id;
+    srv = encrypt_secrets(&srv, keys)?;
     data.servers.push(srv.clone());
     config::save_sync(&data)?;
 
@@ -75,9 +76,11 @@ pub fn update_sync(server: &Server, keys: &dyn KeyProvider) -> Result<ServerResu
     };
 
     let mut data = config::get_sync()?;
+    if srv.id.trim().is_empty() {
+        return Err("Cannot update a saved connection without an ID".to_string());
+    }
     let index = data.servers.iter().position(|item| item.id == srv.id);
-    let old_server = index.map(|i| &data.servers[i]);
-    srv = encrypt_secrets(&srv, keys, old_server)?;
+    srv = encrypt_secrets(&srv, keys)?;
 
     if let Some(i) = index {
         data.servers[i] = srv.clone();
