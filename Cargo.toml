@@ -48,5 +48,9 @@ tar = "0.4"
 zip = { version = "9.6", default-features = false, features = ["deflate"] }
 self-replace = "1.5"
 tempfile = "3.12"
+russh = { version = "0.65", default-features = false, features = ["ring", "flate2", "rsa"] }
+zeroize = "1"
+time = { version = "0.3.55", features = ["serde", "formatting", "parsing"] }
 
 [dev-dependencies]
+futures = "0.3"

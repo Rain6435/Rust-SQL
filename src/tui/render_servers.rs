@@ -43,6 +43,7 @@ impl TuiApp {
             }
             TuiRoute::DatabaseList { .. } => self.render_database_list(f, chunks[1], chunks[2]),
         }
+        self.render_host_key_prompt(f, chunks[1], chunks[2]);
     }
 
     pub(crate) fn render_server_list(&self, f: &mut ratatui::Frame, area: Rect, footer: Rect) {

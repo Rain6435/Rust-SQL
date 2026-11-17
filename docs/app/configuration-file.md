@@ -49,6 +49,27 @@ You can also override the configuration directory via the `$RUST_SQL_HOME` envir
 }
 ```
 
+### `sshHostKeys`
+
+Trusted SSH bastion host keys, written when you approve a fingerprint. One entry per bastion:
+
+```json
+"sshHostKeys": [
+  {
+    "host": "bastion.example.com",
+    "port": 22,
+    "keyAlgorithm": "ssh-ed25519",
+    "fingerprintSha256": "SHA256:BCOriMCRjlJk88UWPoBgqazxhQtK7SfD3idd6RvyZTQ",
+    "approvedAt": "2026-11-17T18:30:00Z"
+  }
+]
+```
+
+`approvedAt` is UTC. A pin older than 180 days must be re-confirmed in the app before the
+tunnel connects. A different key for the same `host:port` is refused; remove the entry (Settings →
+"Trusted SSH host keys") to accept a rotated key. Editing a fingerprint by hand does not bypass the
+check: a mismatch is always refused.
+
 ### `emulateUnsupportedDialects`
 
 Default `false`. MySQL, MariaDB, SQL Server, and Cassandra have no live driver yet, so connecting

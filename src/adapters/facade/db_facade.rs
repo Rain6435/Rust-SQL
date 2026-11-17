@@ -6,6 +6,7 @@ use crate::common::types::{
     AdapterInfo, ConnectionMode, DatabaseFilter, ListRoutineResult, ListTableColumnsResult,
     ListTableResult, ListViewResult, SchemaFilter, Server, TableKeysResult,
 };
+use crate::core::errors::DbCoreError;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -42,8 +43,20 @@ impl DatabaseFacade {
 
     /// Connects to `server` and `database`, creating a [`ServerSession`] if needed.
     pub async fn connect(&mut self, server: Server, database: Option<&str>) -> Result<(), String> {
+        self.connect_checked(server, database)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Like [`Self::connect`], but keeps the typed error so callers can react to SSH host-key
+    /// challenges ([`DbCoreError::Tunnel`]).
+    pub async fn connect_checked(
+        &mut self,
+        server: Server,
+        database: Option<&str>,
+    ) -> Result<(), DbCoreError> {
         if self.server_session.is_none() {
-            self.server_session = Some(create_server(server).map_err(|e| e.to_string())?);
+            self.server_session = Some(create_server(server)?);
         }
         let session = self.server_session.as_mut().unwrap();
         let db_conn = session.create_connection(database);
@@ -56,7 +69,7 @@ impl DatabaseFacade {
                 session.end().await;
                 self.server_session = None;
             }
-            return Err(err.to_string());
+            return Err(err);
         }
         Ok(())
     }

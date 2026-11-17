@@ -1,6 +1,7 @@
 //! Native cross-platform Desktop GUI powered by `eframe` / `egui`.
 
 pub mod header_footer;
+pub mod modal_host_keys;
 pub mod modal_server;
 pub mod modal_settings;
 pub mod modals_files;
@@ -80,6 +81,8 @@ pub struct RustSqlGuiApp {
     pub show_shortcuts_modal: bool,
     /// Input buffer for interactive SSH private-key passphrase prompts.
     pub ssh_passphrase_input: String,
+    /// Whether the trusted SSH host keys manager is open.
+    pub show_host_keys_modal: bool,
     /// File path input buffer for Save/Open/Export dialogs.
     pub file_dialog_path: String,
     /// Whether the Save Query `.sql` modal is open.
@@ -140,6 +143,7 @@ impl RustSqlGuiApp {
             show_client_info_modal: false,
             show_shortcuts_modal: false,
             ssh_passphrase_input: String::new(),
+            show_host_keys_modal: false,
             file_dialog_path: String::new(),
             show_save_query_modal: false,
             show_open_query_modal: false,
@@ -164,6 +168,8 @@ impl RustSqlGuiApp {
         self.render_settings_modal(ctx);
         self.render_preview_modal(ctx);
         self.render_passphrase_and_info_modals(ctx);
+        self.render_host_key_prompt(ctx);
+        self.render_host_keys_manager(ctx);
         self.render_file_and_safety_modals(ctx);
         self.render_bookmarks_stats_erd_modals(ctx);
     }

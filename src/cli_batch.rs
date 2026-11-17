@@ -9,11 +9,37 @@ use rust_sql::common::types::{
 };
 use rust_sql::core::config::DEFAULT_CRYPTO_SECRET;
 use rust_sql::core::connection_string::parse_connection_uri;
+use rust_sql::core::errors::DbCoreError;
 use rust_sql::core::export::export_query_result_to_string;
 use rust_sql::core::result_ops::generate_mermaid_erd;
 use rust_sql::core::safety::analyze_query_safety;
 use rust_sql::core::servers;
+use rust_sql::core::tunnel::approve_host_key;
 use std::collections::HashMap;
+
+/// Connects `db_conn`. An unknown or expiring SSH bastion key is trusted only when it matches
+/// the fingerprint the user passed with `--trust-host-key`; a changed key always fails.
+async fn connect_db(db_conn: &mut DatabaseConnection, trust: Option<&str>) -> Result<(), String> {
+    let err = match db_conn.connect().await {
+        Ok(()) => return Ok(()),
+        Err(e) => e,
+    };
+    let DbCoreError::Tunnel(t) = &err else {
+        return Err(err.to_string());
+    };
+    match (t.host_key_challenge(), trust) {
+        (Some(ch), Some(fp)) if ch.fingerprint_sha256 == fp => {
+            approve_host_key(ch).map_err(|e| e.to_string())?;
+            db_conn.connect().await.map_err(|e| e.to_string())
+        }
+        (Some(ch), _) => Err(format!(
+            "{t}\nIf your administrator confirms this fingerprint, re-run with \
+             --trust-host-key {}",
+            ch.fingerprint_sha256
+        )),
+        _ => Err(t.to_string()),
+    }
+}
 
 /// Prints the EMULATED warning to stderr when `db_conn` is not a live connection.
 fn warn_if_emulated(db_conn: &DatabaseConnection) {
@@ -67,6 +93,7 @@ pub(crate) fn run_headless_batch(
     read_only: bool,
     format_type: &str,
     csv_delimiter: &str,
+    trust_host_key: Option<&str>,
 ) {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -77,7 +104,7 @@ pub(crate) fn run_headless_batch(
         let erd_res: Result<String, String> = rt.block_on(async {
             let mut session = create_server(target_server.clone()).map_err(|e| e.to_string())?;
             let db_conn = session.create_connection(target_server.database.as_deref());
-            db_conn.connect().await.map_err(|e| e.to_string())?;
+            connect_db(db_conn, trust_host_key).await?;
             warn_if_emulated(db_conn);
             let tables = db_conn.list_tables(None).await.map_err(|e| e.to_string())?;
             let mut cols_map: HashMap<String, Vec<ListTableColumnsResult>> = HashMap::new();
@@ -123,7 +150,7 @@ pub(crate) fn run_headless_batch(
         let res = rt.block_on(async {
             let mut session = create_server(target_server.clone()).map_err(|e| e.to_string())?;
             let db_conn = session.create_connection(target_server.database.as_deref());
-            db_conn.connect().await.map_err(|e| e.to_string())?;
+            connect_db(db_conn, trust_host_key).await?;
             warn_if_emulated(db_conn);
             db_conn.execute_query(&sql).await.map_err(|e| e.to_string())
         });

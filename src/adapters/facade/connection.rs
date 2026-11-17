@@ -69,7 +69,7 @@ impl DatabaseConnection {
                 }
                 Err(e) => {
                     self.connecting = false;
-                    return Err(DbCoreError::Message(e));
+                    return Err(DbCoreError::Tunnel(e));
                 }
             }
         }

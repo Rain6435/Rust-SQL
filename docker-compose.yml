@@ -35,5 +35,35 @@ services:
     ports:
       - "3307:3306"
 
+  # SSH bastion for tests/ssh_tunnel_suite.rs. The ssh-tunnel mod turns on AllowTcpForwarding.
+  ssh-bastion:
+    image: lscr.io/linuxserver/openssh-server:latest
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - USER_NAME=tunnel
+      - USER_PASSWORD=tunnel-password
+      - PASSWORD_ACCESS=true
+      - DOCKER_MODS=linuxserver/mods:openssh-server-ssh-tunnel
+    ports:
+      - "2222:2222"
+    networks:
+      - default
+      - private
+
+  # Reachable only from ssh-bastion: internal network, no published port.
+  postgres-private:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: rust_sql
+    networks:
+      - private
+
+networks:
+  private:
+    internal: true
+
 volumes:
   rust_sql_data:

@@ -32,6 +32,8 @@ Options:
   --emulate                Allow MySQL, MariaDB, SQL Server and Cassandra to run on an
                            in-memory emulator (no live driver yet). Results are NOT from
                            your server and are labeled EMULATED in every front end.
+  --trust-host-key <FP>    Trust an unknown SSH bastion host key in batch mode, only if
+                           its SHA256 fingerprint equals <FP> (from your administrator)
   --erd                    Generate and print Mermaid ER Diagram for the target database
   --check-update           Check GitHub Releases for a newer version of Rust-SQL
   --update                 Download, verify SHA-256, and self-update Rust-SQL
@@ -99,6 +101,7 @@ fn main() {
             read_only,
             &format_type,
             &config_data.csv_delimiter,
+            find_arg("--trust-host-key", None).as_deref(),
         );
         return;
     }

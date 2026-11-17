@@ -89,6 +89,9 @@ pub struct ConfigFile {
     /// User-customized base preferences.
     #[serde(flatten)]
     pub base: BaseConfig,
+    /// Trusted SSH bastion host keys, one per `host:port` (trust on first use).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ssh_host_keys: Vec<super::SshHostKeyPin>,
 }
 
 /// Repository metadata attached to the runtime configuration.

@@ -75,6 +75,10 @@ impl RustSqlGuiApp {
                     );
                 });
                 ui.separator();
+                if ui.button("Trusted SSH host keys...").clicked() {
+                    self.show_host_keys_modal = true;
+                }
+                ui.separator();
                 ui.label(RichText::new("Logging").strong());
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.settings_draft.log_console, "Console");
