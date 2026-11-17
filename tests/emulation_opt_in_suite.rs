@@ -5,10 +5,13 @@
 
 use rust_sql::adapters::{create_server, emulation_enabled, set_emulation_enabled};
 use rust_sql::common::event::{DB_CONNECT, DB_GET_CONNECTION_MODE};
-use rust_sql::common::types::{ConnectionMode, Server, EMULATED_BANNER};
-use rust_sql::web::{dispatch_ipc_event, IpcRequest, WebIpcState};
+use rust_sql::common::types::{ConnectionMode, Server, SslConfig, EMULATED_BANNER};
+use rust_sql::core::servers;
+use rust_sql::web::WebIpcState;
 use serde_json::json;
 use std::path::Path;
+
+mod support;
 
 fn server(client: &str) -> Server {
     Server {
@@ -19,18 +22,6 @@ fn server(client: &str) -> Server {
         database: Some("rust_sql".into()),
         ..Default::default()
     }
-}
-
-async fn ipc(state: &WebIpcState, event: &str, args: Vec<serde_json::Value>) -> serde_json::Value {
-    let resp = dispatch_ipc_event(
-        state,
-        IpcRequest {
-            event: event.to_string(),
-            args,
-        },
-    )
-    .await;
-    serde_json::to_value(resp).expect("serialize response")
 }
 
 #[tokio::test]
@@ -50,13 +41,29 @@ async fn emulation_requires_explicit_opt_in_and_is_always_labeled() {
         assert!(db_conn.execute_query("SELECT * FROM users").await.is_err());
     }
 
-    let state = WebIpcState::default();
-    let resp = ipc(
-        &state,
-        DB_CONNECT,
-        vec![json!(server("mysql")), json!("rust_sql")],
-    )
-    .await;
+    let _guard = support::lock().await;
+    let t = support::TestApp::new();
+    let admin = t.user("admin", true);
+    let save = |srv: Server| {
+        let srv = Server {
+            ssl: Some(SslConfig::Bool(false)),
+            ..srv
+        };
+        let res = servers::add_sync(&srv, &*t.keys).expect("save");
+        res.data
+            .unwrap_or_else(|| panic!("{:?}", res.validation_errors))
+            .id
+    };
+    let mysql_id = save(server("mysql"));
+    let state = WebIpcState::new(4);
+    let resp = t
+        .ipc_as(
+            &admin,
+            &state,
+            DB_CONNECT,
+            vec![json!(mysql_id), json!("rust_sql")],
+        )
+        .await;
     assert_eq!(resp["ok"], false, "{resp}");
     assert!(resp["error"]
         .as_str()
@@ -75,16 +82,25 @@ async fn emulation_requires_explicit_opt_in_and_is_always_labeled() {
         );
     }
 
-    let resp = ipc(
-        &state,
-        DB_CONNECT,
-        vec![json!(server("mysql")), json!("rust_sql")],
-    )
-    .await;
+    let resp = t
+        .ipc_as(
+            &admin,
+            &state,
+            DB_CONNECT,
+            vec![json!(mysql_id), json!("rust_sql")],
+        )
+        .await;
     assert_eq!(resp["ok"], true, "{resp}");
     assert_eq!(resp["data"]["mode"], "emulated");
     assert_eq!(resp["data"]["banner"], EMULATED_BANNER);
-    let resp = ipc(&state, DB_GET_CONNECTION_MODE, vec![json!("rust_sql")]).await;
+    let resp = t
+        .ipc_as(
+            &admin,
+            &state,
+            DB_GET_CONNECTION_MODE,
+            vec![json!("rust_sql")],
+        )
+        .await;
     assert_eq!(resp["data"]["mode"], "emulated");
 
     let sqlite = Server {
@@ -93,13 +109,16 @@ async fn emulation_requires_explicit_opt_in_and_is_always_labeled() {
         database: Some(":memory:".into()),
         ..Default::default()
     };
-    let live_state = WebIpcState::default();
-    let resp = ipc(
-        &live_state,
-        DB_CONNECT,
-        vec![json!(sqlite), json!(":memory:")],
-    )
-    .await;
+    let sqlite_id = save(sqlite);
+    let live_state = WebIpcState::new(4);
+    let resp = t
+        .ipc_as(
+            &admin,
+            &live_state,
+            DB_CONNECT,
+            vec![json!(sqlite_id), json!(":memory:")],
+        )
+        .await;
     assert_eq!(resp["data"]["mode"], "live", "{resp}");
     assert!(resp["data"]["banner"].is_null());
 

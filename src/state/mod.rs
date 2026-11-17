@@ -21,7 +21,7 @@ pub use slices_query::{
 
 use crate::adapters::DatabaseFacade;
 use crate::core::bookmarks::BookmarkManager;
-use crate::core::config::DEFAULT_CRYPTO_SECRET;
+use crate::core::keys::{KeyProvider, SharedKeyProvider};
 use std::collections::HashMap;
 
 /// Complete application store combining all state slices and the [`DatabaseFacade`].
@@ -63,6 +63,8 @@ pub struct AppStore {
     pub bookmark_manager: BookmarkManager,
     /// Runtime `:param` / `$param` / `{{param}}` parameter bindings for SQL execution.
     pub query_params: HashMap<String, String>,
+    /// Source of the master key for saved passwords (the OS keychain in production).
+    pub keys: SharedKeyProvider,
 }
 
 impl AppStore {
@@ -71,14 +73,9 @@ impl AppStore {
         Self::default()
     }
 
-    /// Returns the active encryption secret from the loaded configuration, or [`DEFAULT_CRYPTO_SECRET`].
-    pub fn crypto_secret(&self) -> String {
-        self.config
-            .data
-            .as_ref()
-            .and_then(|c| c.crypto.as_ref())
-            .map(|c| c.secret.clone())
-            .unwrap_or_else(|| DEFAULT_CRYPTO_SECRET.to_string())
+    /// Returns the provider of the master key used for saved passwords (the OS keychain).
+    pub fn key_provider(&self) -> &dyn KeyProvider {
+        &*self.keys.0
     }
 
     /// Returns an immutable reference to the currently selected [`QueryTab`], if any.

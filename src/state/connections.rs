@@ -66,8 +66,7 @@ impl AppStore {
             .find(|s| s.id == server_id)
             .ok_or_else(|| "Server configuration not found".to_string())?;
 
-        let secret = self.crypto_secret();
-        let mut decrypted_server = servers::decrypt_secrets(&server, &secret)?;
+        let mut decrypted_server = servers::decrypt_secrets(&server, self.key_provider())?;
 
         let db_client = CLIENTS.iter().find(|c| c.key == decrypted_server.client);
         let default_database = db_client.and_then(|c| c.default_database.clone());

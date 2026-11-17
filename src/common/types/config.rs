@@ -92,6 +92,9 @@ pub struct ConfigFile {
     /// Trusted SSH bastion host keys, one per `host:port` (trust on first use).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ssh_host_keys: Vec<super::SshHostKeyPin>,
+    /// Multi-user web server settings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web: Option<super::WebConfig>,
 }
 
 /// Repository metadata attached to the runtime configuration.
@@ -100,14 +103,6 @@ pub struct ConfigFile {
 pub struct RepositoryInfo {
     /// Canonical Git repository URL.
     pub url: String,
-}
-
-/// Runtime encryption key configuration used to encrypt and decrypt saved passwords.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct CryptoConfig {
-    /// Secret key string used to derive the 32-byte AES-256 key.
-    pub secret: String,
 }
 
 /// Fully resolved runtime configuration with all defaults, CLI flags, and package metadata merged.
@@ -161,9 +156,6 @@ pub struct Config {
     /// Whether `--version` / `-v` was requested on the command line.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub print_version: Option<bool>,
-    /// Runtime encryption secret configuration.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub crypto: Option<CryptoConfig>,
 }
 
 impl Default for Config {
@@ -191,10 +183,6 @@ impl Default for Config {
             }),
             dev_mode: Some(false),
             print_version: Some(false),
-            crypto: Some(CryptoConfig {
-                secret: "j[F6Y6NoWT}+YG|4c|-<89:ByJ83-9Aj?O8>$Zk/[WFk_~gFbg7<wm+*V|A{xQZ,"
-                    .to_string(),
-            }),
         }
     }
 }

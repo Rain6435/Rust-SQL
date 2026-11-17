@@ -13,7 +13,9 @@ mod session;
 
 pub use error::{Redactor, SshAuthMethod, TunnelError};
 pub use handle::{connect_tunnel, connect_tunnel_with_pins, TunnelHandle};
-pub use host_keys::{approve_host_key, delete_host_key, load_pins};
+pub use host_keys::{
+    approve_host_key, approve_host_key_audited, delete_host_key, delete_host_key_audited, load_pins,
+};
 
 use crate::common::types::{Password, Server};
 use crate::core::config::resolve_home_path_to_absolute;

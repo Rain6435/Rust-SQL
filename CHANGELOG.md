@@ -8,6 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **The web UI is now multi-user, signed-in, and served over HTTPS.**
+  - Accounts live in `rust-sql.db` next to the configuration file, with Argon2id password hashes
+    (12 characters minimum). Create the first administrator with
+    `Rust-SQL users create --admin`.
+  - Sessions use a random 256-bit cookie (`HttpOnly; Secure; SameSite=Strict`) that expires after
+    12 hours; state-changing requests require an `X-CSRF-Token` header; 5 failed logins per
+    username or IP in 15 minutes return 429.
+  - The server serves HTTPS with rustls. It refuses to start on a non-loopback address without
+    TLS, and serves plain HTTP on loopback only with `--insecure-http`. The bind address
+    (`--bind`), `Host` allowlist (421 otherwise), session lifetime, and per-session concurrency
+    cap are configurable under `"web"`. Request bodies over 1 MiB get 413.
+  - Each user sees only the saved connections an administrator granted them; a request without a
+    grant gets 403 and is audited. Managing connections, accounts, grants and settings requires
+    an administrator.
+  - An audit log records logins, failed logins, sign-outs, connection and grant changes, query
+    executions (statement type and row count, not the query text), and SSH host-key approvals
+    and deletions from every front end.
+  - `SERVERS_DECRYPT_SECRETS` was removed, no IPC event accepts an encryption secret, and no
+    response contains a saved password (`hasPassword` and similar flags instead). `DB_CONNECT`
+    now takes a saved connection ID.
+  - The built-in default encryption secret was removed. Saved passwords are encrypted only with
+    the master key from the OS keychain provider, which arrives in the next release; until then
+    saved passwords cannot be stored or decrypted.
 - **SSH tunnels now actually use SSH.** Previously the "SSH tunnel" option opened a local port
   that connected straight to the database host, never contacting the bastion.
   - Connections authenticate to the bastion with `russh` (SSH agent, then private key with

@@ -1,16 +1,20 @@
 //! Server entry sanitization, runtime configuration merging, and JSON file I/O helpers.
 
 use crate::common::types::{
-    Config, ConfigFile, CryptoConfig, LogOptions, Password, RepositoryInfo, Server, SslConfig,
+    Config, ConfigFile, LogOptions, Password, RepositoryInfo, Server, SslConfig,
 };
-use crate::core::config::{config_cache, get_sync, path, prepare_sync, DEFAULT_CRYPTO_SECRET};
-use crate::core::crypto;
+use crate::core::config::{config_cache, get_sync, path, prepare_sync};
+use crate::core::keys::{system_key_provider, KeyProvider};
+use crate::core::servers::{decrypt_secrets, encrypt_secrets};
 use std::path::Path;
 use uuid::Uuid;
 
 /// Sanitizes a single [`Server`] entry by assigning a UUID if missing, defaulting `ssl` to `false`,
-/// and encrypting any plaintext passwords using `crypto_secret`.
-pub fn sanitize_server(server: &Server, crypto_secret: &str) -> Result<Server, String> {
+/// and encrypting any plaintext passwords with the master key from `keys`.
+///
+/// The key is requested only when a plaintext password has to be encrypted; if it is
+/// unavailable the error is returned and the entry is not rewritten.
+pub fn sanitize_server(server: &Server, keys: &dyn KeyProvider) -> Result<Server, String> {
     let mut srv = server.clone();
 
     if srv.id.trim().is_empty() {
@@ -22,56 +26,30 @@ pub fn sanitize_server(server: &Server, crypto_secret: &str) -> Result<Server, S
     }
 
     match srv.encrypted {
-        None => {
-            srv.encrypted = Some(true);
-            if let Some(Password::Plain(ref plain)) = srv.password {
-                if !plain.is_empty() {
-                    let enc = crypto::encrypt(plain, crypto_secret).map_err(|e| e.to_string())?;
-                    srv.password = Some(Password::Encrypted(enc));
-                }
-            }
-            if let Some(ref mut ssh) = srv.ssh {
-                if let Some(Password::Plain(ref plain)) = ssh.password {
-                    if !plain.is_empty() {
-                        let enc =
-                            crypto::encrypt(plain, crypto_secret).map_err(|e| e.to_string())?;
-                        ssh.password = Some(Password::Encrypted(enc));
-                    }
-                }
-            }
-        }
+        None => encrypt_secrets(&srv, keys, None),
         Some(true) => {
-            if let Some(Password::Plain(ref plain)) = srv.password {
-                if !plain.is_empty() {
-                    let dec =
-                        crypto::unsafe_decrypt(plain, crypto_secret).map_err(|e| e.to_string())?;
-                    let enc = crypto::encrypt(&dec, crypto_secret).map_err(|e| e.to_string())?;
-                    srv.password = Some(Password::Encrypted(enc));
-                }
+            let has_legacy_plaintext =
+                |pw: &Option<Password>| matches!(pw, Some(Password::Plain(p)) if !p.is_empty());
+            if has_legacy_plaintext(&srv.password)
+                || srv
+                    .ssh
+                    .as_ref()
+                    .is_some_and(|ssh| has_legacy_plaintext(&ssh.password))
+            {
+                // Legacy unsalted values are rejected; there is no migration path.
+                decrypt_secrets(&srv, keys)?;
             }
-            if let Some(ref mut ssh) = srv.ssh {
-                if let Some(Password::Plain(ref plain)) = ssh.password {
-                    if !plain.is_empty() {
-                        let dec = crypto::unsafe_decrypt(plain, crypto_secret)
-                            .map_err(|e| e.to_string())?;
-                        let enc =
-                            crypto::encrypt(&dec, crypto_secret).map_err(|e| e.to_string())?;
-                        ssh.password = Some(Password::Encrypted(enc));
-                    }
-                }
-            }
+            Ok(srv)
         }
-        Some(false) => {}
+        Some(false) => Ok(srv),
     }
-
-    Ok(srv)
 }
 
 /// Sanitizes all server entries within a [`ConfigFile`].
-pub fn sanitize_servers(data: &ConfigFile, crypto_secret: &str) -> Result<Vec<Server>, String> {
+pub fn sanitize_servers(data: &ConfigFile, keys: &dyn KeyProvider) -> Result<Vec<Server>, String> {
     data.servers
         .iter()
-        .map(|srv| sanitize_server(srv, crypto_secret))
+        .map(|srv| sanitize_server(srv, keys))
         .collect()
 }
 
@@ -85,7 +63,9 @@ pub fn get_full_sync(force_clean_cache: bool) -> Result<Config, String> {
         }
     }
 
-    let _ = prepare_sync(DEFAULT_CRYPTO_SECRET);
+    if let Err(e) = prepare_sync(&*system_key_provider()) {
+        log::error!("Configuration file was not sanitized: {e}");
+    }
     let app_config = get_sync().unwrap_or_default();
     let config_path = path();
 
@@ -161,9 +141,6 @@ pub fn get_full_sync(force_clean_cache: bool) -> Result<Config, String> {
         }),
         dev_mode: Some(dev_mode),
         print_version: Some(print_version),
-        crypto: Some(CryptoConfig {
-            secret: DEFAULT_CRYPTO_SECRET.to_string(),
-        }),
     };
 
     if let Ok(mut guard) = config_cache().lock() {

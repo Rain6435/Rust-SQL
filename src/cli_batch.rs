@@ -7,10 +7,10 @@ use rust_sql::adapters::{create_server, DatabaseConnection};
 use rust_sql::common::types::{
     Config, ConnectionMode, ListTableColumnsResult, Server, TableKeysResult, EMULATED_BANNER,
 };
-use rust_sql::core::config::DEFAULT_CRYPTO_SECRET;
 use rust_sql::core::connection_string::parse_connection_uri;
 use rust_sql::core::errors::DbCoreError;
 use rust_sql::core::export::export_query_result_to_string;
+use rust_sql::core::keys::system_key_provider;
 use rust_sql::core::result_ops::generate_mermaid_erd;
 use rust_sql::core::safety::analyze_query_safety;
 use rust_sql::core::servers;
@@ -60,11 +60,6 @@ pub(crate) fn resolve_batch_server(
             std::process::exit(1);
         })
     } else if let Some(key) = server_key {
-        let secret = config_data
-            .crypto
-            .as_ref()
-            .map(|c| c.secret.as_str())
-            .unwrap_or(DEFAULT_CRYPTO_SECRET);
         let found = config_data
             .servers
             .iter()
@@ -74,7 +69,10 @@ pub(crate) fn resolve_batch_server(
                 eprintln!("Server not found: {key}");
                 std::process::exit(1);
             });
-        servers::decrypt_secrets(&found, secret).unwrap_or(found)
+        servers::decrypt_secrets(&found, &*system_key_provider()).unwrap_or_else(|e| {
+            eprintln!("Cannot use saved server {key}: {e}");
+            std::process::exit(1);
+        })
     } else {
         Server {
             name: "sqlite-batch".to_string(),

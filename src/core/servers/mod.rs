@@ -6,6 +6,7 @@ pub use secrets::{decrypt_secrets, encrypt_secrets};
 
 use crate::common::types::{Server, ServerResult};
 use crate::core::config;
+use crate::core::keys::KeyProvider;
 use crate::core::validators::{validate, validate_unique_id};
 use uuid::Uuid;
 
@@ -20,13 +21,13 @@ pub fn get_all_sync() -> Result<Vec<Server>, String> {
     Ok(cfg.servers)
 }
 
-/// Asynchronously validates, encrypts secrets, assigns a UUID, and persists a new server profile.
-pub async fn add(server: &Server, crypto_secret: &str) -> Result<ServerResult, String> {
-    add_sync(server, crypto_secret)
+/// Asynchronously validates, encrypts secrets with the master key, assigns a UUID, and persists a new server profile.
+pub async fn add(server: &Server, keys: &dyn KeyProvider) -> Result<ServerResult, String> {
+    add_sync(server, keys)
 }
 
-/// Synchronously validates, encrypts secrets, assigns a UUID, and persists a new server profile.
-pub fn add_sync(server: &Server, crypto_secret: &str) -> Result<ServerResult, String> {
+/// Synchronously validates, encrypts secrets with the master key, assigns a UUID, and persists a new server profile.
+pub fn add_sync(server: &Server, keys: &dyn KeyProvider) -> Result<ServerResult, String> {
     let mut srv = match validate(server) {
         Ok(s) => s,
         Err(e) => {
@@ -45,7 +46,7 @@ pub fn add_sync(server: &Server, crypto_secret: &str) -> Result<ServerResult, St
         }
     };
 
-    srv = encrypt_secrets(&srv, crypto_secret, None)?;
+    srv = encrypt_secrets(&srv, keys, None)?;
     srv.id = new_id;
     data.servers.push(srv.clone());
     config::save_sync(&data)?;
@@ -56,13 +57,13 @@ pub fn add_sync(server: &Server, crypto_secret: &str) -> Result<ServerResult, St
     })
 }
 
-/// Asynchronously validates, encrypts secrets, and updates an existing server profile in place.
-pub async fn update(server: &Server, crypto_secret: &str) -> Result<ServerResult, String> {
-    update_sync(server, crypto_secret)
+/// Asynchronously validates, encrypts secrets with the master key, and updates an existing server profile in place.
+pub async fn update(server: &Server, keys: &dyn KeyProvider) -> Result<ServerResult, String> {
+    update_sync(server, keys)
 }
 
-/// Synchronously validates, encrypts secrets, and updates an existing server profile in place.
-pub fn update_sync(server: &Server, crypto_secret: &str) -> Result<ServerResult, String> {
+/// Synchronously validates, encrypts secrets with the master key, and updates an existing server profile in place.
+pub fn update_sync(server: &Server, keys: &dyn KeyProvider) -> Result<ServerResult, String> {
     let mut srv = match validate(server) {
         Ok(s) => s,
         Err(e) => {
@@ -76,7 +77,7 @@ pub fn update_sync(server: &Server, crypto_secret: &str) -> Result<ServerResult,
     let mut data = config::get_sync()?;
     let index = data.servers.iter().position(|item| item.id == srv.id);
     let old_server = index.map(|i| &data.servers[i]);
-    srv = encrypt_secrets(&srv, crypto_secret, old_server)?;
+    srv = encrypt_secrets(&srv, keys, old_server)?;
 
     if let Some(i) = index {
         data.servers[i] = srv.clone();
@@ -93,17 +94,20 @@ pub fn update_sync(server: &Server, crypto_secret: &str) -> Result<ServerResult,
 }
 
 /// Asynchronously adds a new server or updates an existing server if `server.id` is non-empty.
-pub async fn add_or_update(server: &Server, crypto_secret: &str) -> Result<ServerResult, String> {
-    add_or_update_sync(server, crypto_secret)
+pub async fn add_or_update(
+    server: &Server,
+    keys: &dyn KeyProvider,
+) -> Result<ServerResult, String> {
+    add_or_update_sync(server, keys)
 }
 
 /// Synchronously adds a new server or updates an existing server if `server.id` is non-empty.
-pub fn add_or_update_sync(server: &Server, crypto_secret: &str) -> Result<ServerResult, String> {
+pub fn add_or_update_sync(server: &Server, keys: &dyn KeyProvider) -> Result<ServerResult, String> {
     let has_id = !server.id.trim().is_empty();
     if has_id {
-        update_sync(server, crypto_secret)
+        update_sync(server, keys)
     } else {
-        add_sync(server, crypto_secret)
+        add_sync(server, keys)
     }
 }
 

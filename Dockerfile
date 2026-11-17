@@ -53,4 +53,6 @@ COPY --from=builder /usr/src/rust-sql/target/release/Rust-SQL /usr/local/bin/Rus
 
 EXPOSE 8080
 ENTRYPOINT ["Rust-SQL"]
-CMD ["--web", "--port", "8080"]
+# Needs TLS (web.tlsCertPath / web.tlsKeyPath in /data/rust-sql.json) and an admin account;
+# see docs/app/web-server.md.
+CMD ["--web", "--bind", "0.0.0.0", "--port", "8080"]

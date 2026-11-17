@@ -28,8 +28,27 @@ pub const SERVERS_UPDATE: &str = "SERVERS_UPDATE";
 pub const SERVERS_ADD_OR_UPDATE: &str = "SERVERS_ADD_OR_UPDATE";
 /// Delete a configured server by its UUID.
 pub const SERVERS_REMOVE_BY_ID: &str = "SERVERS_REMOVE_BY_ID";
-/// Decrypt the database and SSH passwords of a `Server` using the runtime secret.
-pub const SERVERS_DECRYPT_SECRETS: &str = "SERVERS_DECRYPT_SECRETS";
+
+/// Admin: list web accounts.
+pub const USERS_LIST: &str = "USERS_LIST";
+/// Admin: create a web account `(username, password, isAdmin)`.
+pub const USERS_CREATE: &str = "USERS_CREATE";
+/// Admin: delete a web account `(userId)`.
+pub const USERS_DELETE: &str = "USERS_DELETE";
+/// Admin: set or clear the admin flag `(userId, isAdmin)`.
+pub const USERS_SET_ADMIN: &str = "USERS_SET_ADMIN";
+/// Admin: replace a password `(userId, password)`; revokes that user's sessions.
+pub const USERS_SET_PASSWORD: &str = "USERS_SET_PASSWORD";
+/// Admin: revoke every session of `(userId)`.
+pub const USERS_REVOKE_SESSIONS: &str = "USERS_REVOKE_SESSIONS";
+/// Admin: list connection grants, optionally for `(userId)`.
+pub const GRANTS_LIST: &str = "GRANTS_LIST";
+/// Admin: grant `(userId, connectionId)`.
+pub const GRANTS_ADD: &str = "GRANTS_ADD";
+/// Admin: revoke `(userId, connectionId)`.
+pub const GRANTS_REMOVE: &str = "GRANTS_REMOVE";
+/// Admin: newest audit rows, `(limit)` up to 1000.
+pub const AUDIT_LIST: &str = "AUDIT_LIST";
 
 /// Log an error emitted by the UI renderer.
 pub const LOGGER_ERROR: &str = "LOGGER_ERROR";

@@ -2,14 +2,16 @@
 //! Web UI (`--web`), Mermaid ERD generation (`--erd`), and headless batch SQL execution (`--exec`).
 
 mod cli_batch;
+mod cli_users;
 
 use cli_batch::{resolve_batch_server, run_headless_batch};
+use cli_users::run_users_cli;
 use rust_sql::adapters::{set_emulation_enabled, set_select_limit};
 use rust_sql::core::config::get_full_sync;
 use rust_sql::core::updater::run_update_cli;
 use rust_sql::gui::run_native_gui;
 use rust_sql::tui::run_tui;
-use rust_sql::web::run_web_server;
+use rust_sql::web::{run_web_server, WebLaunchOptions};
 
 /// Prints CLI usage and flags to stdout.
 fn print_help() {
@@ -18,12 +20,17 @@ fn print_help() {
 A fast, lightweight SQL client with cross database and platform support.
 
 Usage: Rust-SQL [OPTIONS]
+       Rust-SQL users create [--admin] [--username <NAME>] [--password-stdin]
+       Rust-SQL users list
 
 Options:
   --gui                    Launch native Desktop GUI (default when DISPLAY/WAYLAND is set)
   --tui, --term            Launch Terminal UI
-  --web                    Launch Web UI & IPC Server
+  --web                    Launch the multi-user Web UI (sign-in required; HTTPS unless
+                           --insecure-http on loopback). Configure under \"web\" in rust-sql.json
   --port <PORT>            Port for Web UI server (default: 8080)
+  --bind <IP>              Web UI bind address (default: 127.0.0.1; others require TLS)
+  --insecure-http          Development only: serve the Web UI over plain HTTP on loopback
   -e, --exec <SQL>         Execute SQL query in headless batch mode and exit
   --uri <CONN_URI>         Connection URI for batch execution or ERD generation
   --server <NAME_OR_ID>    Saved server name or ID for batch execution
@@ -51,6 +58,14 @@ fn main() {
 
     if args.iter().any(|a| a == "--help" || a == "-h") {
         print_help();
+        return;
+    }
+
+    if args.get(1).map(String::as_str) == Some("users") {
+        if let Err(e) = run_users_cli(&args[2..]) {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
         return;
     }
 
@@ -109,9 +124,11 @@ fn main() {
     let want_tui = args.iter().any(|a| a == "--tui" || a == "--term");
     let want_web = args.iter().any(|a| a == "--web");
     let want_gui = args.iter().any(|a| a == "--gui");
-    let port = find_arg("--port", None)
-        .and_then(|s| s.parse::<u16>().ok())
-        .unwrap_or(8080);
+    let web_opts = WebLaunchOptions {
+        port: find_arg("--port", None).and_then(|s| s.parse::<u16>().ok()),
+        bind: find_arg("--bind", None),
+        insecure_http: args.iter().any(|a| a == "--insecure-http"),
+    };
 
     if want_tui {
         if let Err(e) = run_tui() {
@@ -126,7 +143,7 @@ fn main() {
             .enable_all()
             .build()
             .expect("tokio runtime");
-        if let Err(e) = rt.block_on(run_web_server(port)) {
+        if let Err(e) = rt.block_on(run_web_server(web_opts.clone())) {
             eprintln!("Web server error: {e}");
             std::process::exit(1);
         }
@@ -143,11 +160,14 @@ fn main() {
             std::process::exit(1);
         }
     } else if let Err(e) = run_tui() {
-        log::warn!("TUI fallback failed ({e}), starting Web server on port {port}");
+        log::warn!("TUI fallback failed ({e}), starting the Web server");
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .expect("tokio runtime");
-        let _ = rt.block_on(run_web_server(port));
+        if let Err(e) = rt.block_on(run_web_server(web_opts)) {
+            eprintln!("Web server error: {e}");
+            std::process::exit(1);
+        }
     }
 }

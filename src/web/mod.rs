@@ -1,37 +1,34 @@
-//! Embedded HTTP/IPC web server (`--web`) powered by `axum`.
+//! Multi-user web server (`--web`) powered by `axum`.
+//!
+//! Accounts, sessions, connection grants, and the audit log live in the application database
+//! ([`crate::core::appdb`]). See [`server`] for the HTTP guards and TLS, [`auth`] for login and
+//! CSRF, and [`state`] for per-session state and authorization helpers. Encryption keys never
+//! travel to or from clients, and no response contains a saved password.
 
 pub mod assets;
+pub mod auth;
+pub mod ipc_admin;
 pub mod ipc_config_servers;
 pub mod ipc_db_metadata;
 pub mod ipc_db_queries;
+pub mod ipc_policy;
 pub mod ipc_ssh_host_keys;
+pub mod public_server;
+pub mod query_audit;
+pub mod rate_limit;
+pub mod server;
+pub mod settings;
+pub mod state;
 
 pub use assets::RUST_SQL_WEB_HTML;
+pub use server::{build_web_router, run_web_server, serve_on};
+pub use settings::{WebLaunchOptions, WebSettings};
+pub use state::{IpcCtx, WebApp, WebIpcState};
 
-use crate::adapters::DatabaseFacade;
 use crate::common::event::{BROWSER_CLIPBOARD_WRITE, LOGGER_ERROR};
 use crate::common::types::HostKeyChallenge;
-use crate::core::export::write_clipboard_text;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::{Html, IntoResponse, Json},
-    routing::{get, post},
-    Router,
-};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use std::sync::Arc;
-use tokio::sync::Mutex;
-
-/// Shared state held by the embedded `axum` web server.
-#[derive(Default)]
-pub struct WebIpcState {
-    /// Mutex-protected [`DatabaseFacade`] handling all IPC database operations.
-    pub db: Mutex<DatabaseFacade>,
-    /// Host-key challenges issued by `DB_CONNECT`; only these can be approved.
-    pub pending_host_keys: Mutex<Vec<HostKeyChallenge>>,
-}
+use serde_json::Value;
 
 /// JSON payload for an incoming `/api/ipc` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +58,9 @@ pub struct IpcResponse {
         skip_serializing_if = "Option::is_none"
     )]
     pub host_key_challenge: Option<Box<HostKeyChallenge>>,
+    /// HTTP status override (for example 403 for a missing grant); not serialized.
+    #[serde(skip)]
+    pub status: Option<u16>,
 }
 
 impl IpcResponse {
@@ -71,6 +71,7 @@ impl IpcResponse {
             data: serde_json::to_value(val).ok(),
             error: None,
             host_key_challenge: None,
+            status: None,
         }
     }
 
@@ -81,6 +82,23 @@ impl IpcResponse {
             data: None,
             error: Some(msg.into()),
             host_key_challenge: None,
+            status: None,
+        }
+    }
+
+    /// Constructs a 403 response.
+    pub fn forbidden(msg: impl Into<String>) -> Self {
+        Self {
+            status: Some(403),
+            ..Self::err(msg)
+        }
+    }
+
+    /// Constructs a 404 response.
+    pub fn not_found(msg: impl Into<String>) -> Self {
+        Self {
+            status: Some(404),
+            ..Self::err(msg)
         }
     }
 }
@@ -91,76 +109,34 @@ pub(crate) fn str_arg(args: &[Value], idx: usize) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-/// Dispatches an [`IpcRequest`] across config, server, metadata, and query IPC handlers.
-pub async fn dispatch_ipc_event(state: &WebIpcState, req: IpcRequest) -> IpcResponse {
+/// Dispatches an authenticated [`IpcRequest`] to the admin, config, server, metadata, query,
+/// and host-key handlers.
+pub async fn dispatch_ipc_event(ctx: &IpcCtx<'_>, req: IpcRequest) -> IpcResponse {
     let event = req.event.as_str();
     let args = &req.args;
 
-    if let Some(resp) = ipc_config_servers::handle_config_servers_ipc(event, args).await {
+    if let Some(resp) = ipc_admin::handle_admin_ipc(ctx, event, args).await {
         return resp;
     }
-    if let Some(resp) = ipc_db_metadata::handle_db_metadata_ipc(state, event, args).await {
+    if let Some(resp) = ipc_config_servers::handle_config_servers_ipc(ctx, event, args).await {
         return resp;
     }
-    if let Some(resp) = ipc_db_queries::handle_db_queries_ipc(state, event, args).await {
+    if let Some(resp) = ipc_db_metadata::handle_db_metadata_ipc(ctx, event, args).await {
         return resp;
     }
-    if let Some(resp) = ipc_ssh_host_keys::handle_ssh_host_keys_ipc(state, event, args).await {
+    if let Some(resp) = ipc_db_queries::handle_db_queries_ipc(ctx, event, args).await {
+        return resp;
+    }
+    if let Some(resp) = ipc_ssh_host_keys::handle_ssh_host_keys_ipc(ctx, event, args).await {
         return resp;
     }
 
     match event {
+        // The server's clipboard is not the user's; the browser copies locally instead.
         BROWSER_CLIPBOARD_WRITE => {
-            write_clipboard_text(&str_arg(args, 0).unwrap_or_default());
-            IpcResponse::success(Value::Null)
+            IpcResponse::err("Clipboard writes happen in the browser, not on the server")
         }
         LOGGER_ERROR => IpcResponse::success(Value::Null),
         other => IpcResponse::err(format!("Unknown IPC event: {other}")),
     }
-}
-
-async fn handle_ipc(
-    State(state): State<Arc<WebIpcState>>,
-    Json(req): Json<IpcRequest>,
-) -> impl IntoResponse {
-    let resp = dispatch_ipc_event(&state, req).await;
-    let status = if resp.ok {
-        StatusCode::OK
-    } else {
-        StatusCode::BAD_REQUEST
-    };
-    (status, Json(resp))
-}
-
-async fn handle_index() -> Html<&'static str> {
-    Html(RUST_SQL_WEB_HTML)
-}
-
-async fn handle_health() -> Json<Value> {
-    Json(json!({
-        "name": "Rust-SQL",
-        "version": env!("CARGO_PKG_VERSION"),
-        "status": "ok"
-    }))
-}
-
-/// Builds the [`axum::Router`] serving `/`, `/api/health`, and `/api/ipc`.
-pub fn build_web_router(state: Arc<WebIpcState>) -> Router {
-    Router::new()
-        .route("/", get(handle_index))
-        .route("/api/health", get(handle_health))
-        .route("/api/ipc", post(handle_ipc))
-        .with_state(state)
-}
-
-/// Starts the embedded HTTP/IPC web server bound to `127.0.0.1:{port}`.
-pub async fn run_web_server(port: u16) -> Result<(), String> {
-    let state = Arc::new(WebIpcState::default());
-    let app = build_web_router(state);
-    let addr = format!("127.0.0.1:{port}");
-    println!("Rust-SQL Web GUI listening on http://{addr}");
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
-        .map_err(|e| e.to_string())?;
-    axum::serve(listener, app).await.map_err(|e| e.to_string())
 }
