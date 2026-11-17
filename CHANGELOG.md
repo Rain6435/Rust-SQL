@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.40.0] - 2026-11-17
+
+### Changed
+- **Full Codebase Modularization & Rustdoc Documentation**:
+  - Modularized all 84 `.rs` files across `src/` and `tests/` to a strict maximum of 275 lines per file with full module-level (`//!`) and item-level (`///`) Rustdoc documentation.
+  - Added automated test enforcement (`test_codebase_modularization_and_documentation_invariant`) in `tests/store_ipc_tui_suite.rs`.
+- **Developer Experience & CI/CD**:
+  - Added version-controlled `.githooks/` (`pre-commit`, `commit-msg`, `pre-push`) with `make install-hooks`.
+  - Fixed Windows `sqlite3.lib` linking in CI and Release workflows, and updated GitHub Actions & Cargo dependencies (`eframe`/`egui` 0.37, `ratatui` 0.30, `crossterm` 0.29, `axum` 0.8, `aes` 0.9, `cbc` 0.2, `rand` 0.10, `dirs` 7.0, `thiserror` 2.0).
+
 ## [1.39.0] - 2026-11-17
 
 ### Added
