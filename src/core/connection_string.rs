@@ -1,8 +1,10 @@
+//! Bidirectional database connection URI parser and builder (`postgres://`, `mysql://`, `mssql://`, `file://`, etc.).
+
 use crate::adapters::CLIENTS;
 use crate::common::types::{Password, Server};
 
 /// Parses a connection URI string (`postgres://user:pass@host:5432/db`, `mysql://...`, `file:///path.db`, etc.)
-/// into a `Server` object, matching `ServerModalForm` (`connection-string` package).
+/// into a [`Server`] configuration object.
 pub fn parse_connection_uri(uri: &str, existing: Option<&Server>) -> Option<Server> {
     let trimmed = uri.trim();
     if trimmed.is_empty() {
@@ -66,7 +68,7 @@ pub fn parse_connection_uri(uri: &str, existing: Option<&Server>) -> Option<Serv
     Some(srv)
 }
 
-/// Builds a connection URI string from a `Server`, masking the password with `*` unless `show_plain_password` is true.
+/// Builds a connection URI string from a [`Server`], masking the password with `*` unless `show_plain_password` is `true`.
 pub fn build_connection_uri(server: &Server, show_plain_password: bool) -> String {
     let Some(client_info) = CLIENTS.iter().find(|c| c.key == server.client) else {
         return String::new();

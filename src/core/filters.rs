@@ -1,6 +1,8 @@
+//! SQL `WHERE` clause builders and in-memory predicates for [`DatabaseFilter`] and [`SchemaFilter`].
+
 use crate::common::types::{DatabaseFilter, FilterClause, SchemaFilter};
 
-/// Build SQL filter clause for schema
+/// Builds a SQL filter predicate for schema names (defaulting column name to `"schema_name"`).
 pub fn build_schema_filter(
     filter: Option<&SchemaFilter>,
     schema_field: Option<&str>,
@@ -11,7 +13,7 @@ pub fn build_schema_filter(
     Some(build_clause(clause, field))
 }
 
-/// Build SQL filter clause for database
+/// Builds a SQL filter predicate for database names on `database_field`.
 pub fn build_database_filter(
     filter: Option<&DatabaseFilter>,
     database_field: &str,
@@ -51,7 +53,7 @@ fn build_clause(clause: &FilterClause, field: &str) -> String {
     }
 }
 
-/// In-memory database filter used by MySQL adapter
+/// Evaluates an in-memory [`DatabaseFilter`] against a database `name`.
 pub fn filter_database_name(name: &str, filter: Option<&DatabaseFilter>) -> bool {
     let Some(filter) = filter else {
         return true;
@@ -78,7 +80,7 @@ pub fn filter_database_name(name: &str, filter: Option<&DatabaseFilter>) -> bool
     }
 }
 
-/// In-memory schema filter helper
+/// Evaluates an in-memory [`SchemaFilter`] against an optional schema `name`.
 pub fn filter_schema_name(name: Option<&str>, filter: Option<&SchemaFilter>) -> bool {
     let Some(filter) = filter else {
         return true;

@@ -1,78 +1,15 @@
+//! Server entry sanitization, runtime configuration merging, and JSON file I/O helpers.
+
 use crate::common::types::{
-    BaseConfig, Config, ConfigFile, CryptoConfig, LogOptions, Password, RepositoryInfo, Server,
-    SslConfig,
+    Config, ConfigFile, CryptoConfig, LogOptions, Password, RepositoryInfo, Server, SslConfig,
 };
+use crate::core::config::{config_cache, get_sync, path, prepare_sync, DEFAULT_CRYPTO_SECRET};
 use crate::core::crypto;
-use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::path::Path;
 use uuid::Uuid;
 
-pub const DEFAULT_CRYPTO_SECRET: &str =
-    "j[F6Y6NoWT}+YG|4c|-<89:ByJ83-9Aj?O8>$Zk/[WFk_~gFbg7<wm+*V|A{xQZ,";
-
-static CONFIG_CACHE: OnceLock<Mutex<Option<Config>>> = OnceLock::new();
-static OVERRIDE_CONFIG_PATH: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
-
-fn config_cache() -> &'static Mutex<Option<Config>> {
-    CONFIG_CACHE.get_or_init(|| Mutex::new(None))
-}
-
-fn override_path_store() -> &'static Mutex<Option<PathBuf>> {
-    OVERRIDE_CONFIG_PATH.get_or_init(|| Mutex::new(None))
-}
-
-/// Allows tests to override the config path (`utils-stub` equivalent).
-pub fn set_config_path_override(path: Option<PathBuf>) {
-    if let Ok(mut guard) = override_path_store().lock() {
-        *guard = path;
-    }
-    if let Ok(mut cache) = config_cache().lock() {
-        *cache = None;
-    }
-}
-
-/// Resolves `~` to the user's home directory (`resolveHomePathToAbsolute`).
-pub fn resolve_home_path_to_absolute(filename: &str) -> String {
-    if let Some(rest) = filename.strip_prefix("~/") {
-        if let Some(home) = dirs::home_dir() {
-            return home.join(rest).to_string_lossy().into_owned();
-        }
-    }
-    filename.to_string()
-}
-
-/// Resolves the Rust-SQL config file path:
-/// 1. Override path (for tests)
-/// 2. `$RUST_SQL_HOME/rust-sql.json`
-/// 3. `~/.rust-sql.json` (if it already exists)
-/// 4. `~/.config/Rust-SQL/rust-sql.json` (or OS-specific config dir)
-pub fn get_config_path() -> PathBuf {
-    if let Ok(guard) = override_path_store().lock() {
-        if let Some(ref p) = *guard {
-            return p.clone();
-        }
-    }
-
-    if let Ok(rust_sql_home) = std::env::var("RUST_SQL_HOME") {
-        if !rust_sql_home.is_empty() {
-            return Path::new(&rust_sql_home).join("rust-sql.json");
-        }
-    }
-
-    if let Some(home) = dirs::home_dir() {
-        let legacy = home.join(".rust-sql.json");
-        if legacy.is_file() {
-            return legacy;
-        }
-    }
-
-    if let Some(cfg_dir) = dirs::config_dir() {
-        return cfg_dir.join("Rust-SQL").join("rust-sql.json");
-    }
-
-    PathBuf::from("rust-sql.json")
-}
-
+/// Sanitizes a single [`Server`] entry by assigning a UUID if missing, defaulting `ssl` to `false`,
+/// and encrypting any plaintext passwords using `crypto_secret`.
 pub fn sanitize_server(server: &Server, crypto_secret: &str) -> Result<Server, String> {
     let mut srv = server.clone();
 
@@ -130,6 +67,7 @@ pub fn sanitize_server(server: &Server, crypto_secret: &str) -> Result<Server, S
     Ok(srv)
 }
 
+/// Sanitizes all server entries within a [`ConfigFile`].
 pub fn sanitize_servers(data: &ConfigFile, crypto_secret: &str) -> Result<Vec<Server>, String> {
     data.servers
         .iter()
@@ -137,104 +75,7 @@ pub fn sanitize_servers(data: &ConfigFile, crypto_secret: &str) -> Result<Vec<Se
         .collect()
 }
 
-pub fn prepare_sync(crypto_secret: &str) -> Result<(), String> {
-    let filename = get_config_path();
-    if !filename.exists() {
-        if let Some(parent) = filename.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        let empty = ConfigFile::default();
-        write_json_file_sync(&filename, &empty)?;
-    }
-
-    let mut result: ConfigFile = read_json_file_sync(&filename)?;
-    result.servers = sanitize_servers(&result, crypto_secret)?;
-    write_json_file_sync(&filename, &result)?;
-    Ok(())
-}
-
-pub async fn prepare(crypto_secret: &str) -> Result<(), String> {
-    prepare_sync(crypto_secret)
-}
-
-pub fn path() -> String {
-    let filename = get_config_path();
-    resolve_home_path_to_absolute(&filename.to_string_lossy())
-}
-
-pub fn get_sync() -> Result<ConfigFile, String> {
-    let filename = get_config_path();
-    if !filename.exists() {
-        if let Some(parent) = filename.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        let empty = ConfigFile::default();
-        write_json_file_sync(&filename, &empty)?;
-        return Ok(empty);
-    }
-    read_json_file_sync(&filename)
-}
-
-pub async fn get() -> Result<ConfigFile, String> {
-    get_sync()
-}
-
-pub fn save_sync(data: &ConfigFile) -> Result<(), String> {
-    let filename = get_config_path();
-    if let Some(parent) = filename.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    write_json_file_sync(&filename, data)?;
-    if let Ok(mut cache) = config_cache().lock() {
-        *cache = None;
-    }
-    Ok(())
-}
-
-pub async fn save(data: &ConfigFile) -> Result<(), String> {
-    save_sync(data)
-}
-
-pub fn save_settings_sync(settings: &BaseConfig) -> Result<(), String> {
-    let mut full = get_sync()?;
-    if settings.log.is_some() {
-        full.base.log = settings.log.clone();
-    }
-    if settings.zoom_factor.is_some() {
-        full.base.zoom_factor = settings.zoom_factor;
-    }
-    if settings.limit_query_default_select_top.is_some() {
-        full.base.limit_query_default_select_top = settings.limit_query_default_select_top;
-    }
-    if settings.enabled_auto_complete.is_some() {
-        full.base.enabled_auto_complete = settings.enabled_auto_complete;
-    }
-    if settings.enabled_live_auto_complete.is_some() {
-        full.base.enabled_live_auto_complete = settings.enabled_live_auto_complete;
-    }
-    if settings.enabled_dark_theme.is_some() {
-        full.base.enabled_dark_theme = settings.enabled_dark_theme;
-    }
-    if settings.disabled_open_animation.is_some() {
-        full.base.disabled_open_animation = settings.disabled_open_animation;
-    }
-    if settings.csv_delimiter.is_some() {
-        full.base.csv_delimiter = settings.csv_delimiter.clone();
-    }
-    if settings.connections_as_list.is_some() {
-        full.base.connections_as_list = settings.connections_as_list;
-    }
-    if settings.custom_font.is_some() {
-        full.base.custom_font = settings.custom_font.clone();
-    }
-    save_sync(&full)
-}
-
-pub async fn save_settings(settings: &BaseConfig) -> Result<(), String> {
-    save_settings_sync(settings)
-}
-
-/// Returns the full merged `Config` object (`getConfig` in `src/browser/config.ts`).
+/// Returns the fully merged runtime [`Config`] object, optionally bypassing the cache.
 pub fn get_full_sync(force_clean_cache: bool) -> Result<Config, String> {
     if !force_clean_cache {
         if let Ok(guard) = config_cache().lock() {
@@ -328,16 +169,19 @@ pub fn get_full_sync(force_clean_cache: bool) -> Result<Config, String> {
     Ok(full)
 }
 
+/// Asynchronously returns the fully merged runtime [`Config`] object.
 pub async fn get_full(force_clean_cache: bool) -> Result<Config, String> {
     get_full_sync(force_clean_cache)
 }
 
-fn read_json_file_sync<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
+/// Reads and deserializes a JSON file from `path`.
+pub fn read_json_file_sync<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
     let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     serde_json::from_str(&content).map_err(|e| e.to_string())
 }
 
-fn write_json_file_sync<T: serde::Serialize>(path: &Path, data: &T) -> Result<(), String> {
+/// Serializes `data` as pretty-printed JSON with a trailing newline and writes it to `path`.
+pub fn write_json_file_sync<T: serde::Serialize>(path: &Path, data: &T) -> Result<(), String> {
     let mut json = serde_json::to_string_pretty(data).map_err(|e| e.to_string())?;
     json.push('\n');
     std::fs::write(path, json).map_err(|e| e.to_string())

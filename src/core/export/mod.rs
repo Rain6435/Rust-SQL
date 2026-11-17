@@ -1,7 +1,13 @@
-use crate::adapters::wrap_identifier_for_adapter;
+//! Query result export to files, strings, and system clipboard, plus `.sql` file persistence.
+
+pub mod formats;
+
+pub use formats::{
+    stringify_result_to_csv, stringify_result_to_json, stringify_result_to_jsonl,
+    stringify_result_to_markdown, stringify_result_to_sql_insert,
+};
+
 use crate::common::types::{OpenedQueryInfo, SavedQueryInfo};
-use crate::common::utils::value_to_string;
-use crate::core::params::format_sql_literal;
 use serde_json::{Map, Value};
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
@@ -12,129 +18,7 @@ fn clipboard_store() -> &'static Mutex<String> {
     CLIPBOARD_BUFFER.get_or_init(|| Mutex::new(String::new()))
 }
 
-/// Converts query result rows to CSV format with a header row (`stringifyResultToCSV` in `src/browser/core/db.ts`).
-pub fn stringify_result_to_csv(
-    rows: &[Map<String, Value>],
-    delimiter: &str,
-) -> Result<String, String> {
-    if rows.is_empty() {
-        return Ok(String::new());
-    }
-
-    let delim_byte = delimiter.as_bytes().first().copied().unwrap_or(b',');
-    let mut wtr = csv::WriterBuilder::new()
-        .delimiter(delim_byte)
-        .from_writer(vec![]);
-
-    let columns: Vec<String> = rows[0].keys().cloned().collect();
-    wtr.write_record(&columns).map_err(|e| e.to_string())?;
-
-    for row in rows {
-        let record: Vec<String> = columns
-            .iter()
-            .map(|col| {
-                row.get(col)
-                    .map(value_to_string)
-                    .unwrap_or_else(|| "NULL".to_string())
-            })
-            .collect();
-        wtr.write_record(&record).map_err(|e| e.to_string())?;
-    }
-
-    let bytes = wtr.into_inner().map_err(|e| e.to_string())?;
-    String::from_utf8(bytes).map_err(|e| e.to_string())
-}
-
-/// Converts query result rows to formatted JSON (`JSON.stringify(rows, null, 2)`).
-pub fn stringify_result_to_json(rows: &[Map<String, Value>]) -> Result<String, String> {
-    serde_json::to_string_pretty(rows).map_err(|e| e.to_string())
-}
-
-/// Converts query result rows to newline-delimited JSON (`JSONL` / `NDJSON`).
-pub fn stringify_result_to_jsonl(rows: &[Map<String, Value>]) -> Result<String, String> {
-    let mut out = String::new();
-    for row in rows {
-        let line = serde_json::to_string(row).map_err(|e| e.to_string())?;
-        out.push_str(&line);
-        out.push('\n');
-    }
-    Ok(out)
-}
-
-/// Converts query result rows to a GitHub-Flavored Markdown table.
-pub fn stringify_result_to_markdown(rows: &[Map<String, Value>]) -> Result<String, String> {
-    if rows.is_empty() {
-        return Ok(String::new());
-    }
-    let columns: Vec<String> = rows[0].keys().cloned().collect();
-    let mut out = String::new();
-    out.push_str("| ");
-    out.push_str(&columns.join(" | "));
-    out.push_str(" |\n| ");
-    out.push_str(
-        &columns
-            .iter()
-            .map(|_| "---")
-            .collect::<Vec<_>>()
-            .join(" | "),
-    );
-    out.push_str(" |\n");
-
-    for row in rows {
-        let cells: Vec<String> = columns
-            .iter()
-            .map(|col| {
-                row.get(col)
-                    .map(value_to_string)
-                    .unwrap_or_else(|| "NULL".to_string())
-                    .replace('|', "\\|")
-                    .replace('\n', " ")
-            })
-            .collect();
-        out.push_str("| ");
-        out.push_str(&cells.join(" | "));
-        out.push_str(" |\n");
-    }
-
-    Ok(out)
-}
-
-/// Converts query result rows into SQL `INSERT INTO` statements with dialect-specific identifier quoting.
-pub fn stringify_result_to_sql_insert(
-    rows: &[Map<String, Value>],
-    table_name: &str,
-    adapter_key: &str,
-) -> Result<String, String> {
-    if rows.is_empty() {
-        return Ok(String::new());
-    }
-    let tbl = if table_name.trim().is_empty() {
-        "export_table"
-    } else {
-        table_name.trim()
-    };
-    let wrapped_tbl = wrap_identifier_for_adapter(adapter_key, tbl);
-    let columns: Vec<String> = rows[0].keys().cloned().collect();
-    let wrapped_cols = columns
-        .iter()
-        .map(|c| wrap_identifier_for_adapter(adapter_key, c))
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    let mut out = String::new();
-    for row in rows {
-        let vals = columns
-            .iter()
-            .map(|col| format_sql_literal(row.get(col).unwrap_or(&Value::Null)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        out.push_str(&format!(
-            "INSERT INTO {wrapped_tbl} ({wrapped_cols}) VALUES ({vals});\n"
-        ));
-    }
-    Ok(out)
-}
-
+/// Serializes `rows` into the requested `export_type` (`CSV`, `JSON`, `JSONL`, `MARKDOWN`, or `SQL`).
 pub fn export_query_result_to_string(
     rows: &[Map<String, Value>],
     export_type: &str,
@@ -154,6 +38,7 @@ pub fn export_query_result_to_string(
     }
 }
 
+/// Exports `rows` in `export_type` format to `filename` on disk, automatically appending the appropriate file extension.
 pub fn export_query_result_to_file_path(
     rows: &[Map<String, Value>],
     export_type: &str,
@@ -181,6 +66,7 @@ pub fn export_query_result_to_file_path(
     Ok(final_path)
 }
 
+/// Writes `text` to the in-memory clipboard buffer and any available system clipboard utility (`wl-copy`, `xclip`, `xsel`).
 pub fn write_clipboard_text(text: &str) {
     if let Ok(mut guard) = clipboard_store().lock() {
         *guard = text.to_string();
@@ -207,6 +93,7 @@ pub fn write_clipboard_text(text: &str) {
     }
 }
 
+/// Reads the most recently written text from the in-memory clipboard buffer.
 pub fn read_clipboard_text() -> String {
     clipboard_store()
         .lock()
@@ -214,6 +101,7 @@ pub fn read_clipboard_text() -> String {
         .unwrap_or_default()
 }
 
+/// Formats `rows` as `export_type` and copies the result to the clipboard.
 pub fn export_query_result_to_clipboard(
     rows: &[Map<String, Value>],
     export_type: &str,
@@ -224,6 +112,7 @@ pub fn export_query_result_to_clipboard(
     Ok(value)
 }
 
+/// Saves a SQL `query` string to `filename` (ensuring a `.sql` extension) and returns [`SavedQueryInfo`].
 pub fn save_query_to_file(filename: &str, query: &str) -> Result<SavedQueryInfo, String> {
     let final_path = if Path::new(filename)
         .extension()
@@ -255,6 +144,7 @@ pub fn save_query_to_file(filename: &str, query: &str) -> Result<SavedQueryInfo,
     })
 }
 
+/// Reads a `.sql` query file from `filename` and returns [`OpenedQueryInfo`].
 pub fn open_query_from_file(filename: &str) -> Result<OpenedQueryInfo, String> {
     let query = std::fs::read_to_string(filename).map_err(|e| e.to_string())?;
     let name = Path::new(filename)

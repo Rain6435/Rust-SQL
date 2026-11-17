@@ -1,3 +1,5 @@
+//! SSH local port-forwarding tunnel configuration and lifecycle management.
+
 use crate::common::types::{Password, Server};
 use crate::core::config::resolve_home_path_to_absolute;
 use std::net::SocketAddr;
@@ -6,21 +8,32 @@ use tokio::io::copy_bidirectional;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Notify;
 
+/// Validated SSH port-forwarding parameters extracted from a [`Server`] profile.
 #[derive(Debug, Clone)]
 pub struct TunnelConfig {
+    /// SSH username.
     pub username: String,
+    /// SSH bastion host.
     pub ssh_host: String,
+    /// SSH bastion port.
     pub ssh_port: u32,
+    /// Target database host reachable from the SSH bastion.
     pub dst_host: String,
+    /// Target database port reachable from the SSH bastion.
     pub dst_port: u32,
+    /// Optional SSH password.
     pub password: Option<String>,
+    /// Optional private key passphrase.
     pub passphrase: Option<String>,
+    /// Resolved absolute path to the private key file.
     pub private_key_path: Option<String>,
+    /// PEM/OpenSSH private key file contents.
     pub private_key_content: Option<String>,
+    /// Path to the local `SSH_AUTH_SOCK` Unix socket when agent forwarding is enabled.
     pub agent_sock: Option<String>,
 }
 
-/// Validates and builds the SSH tunnel configuration.
+/// Validates and builds the SSH [`TunnelConfig`] for `server_info`.
 pub fn config_tunnel(server_info: &Server) -> Result<TunnelConfig, String> {
     let dst_host = server_info
         .host
@@ -73,7 +86,6 @@ pub fn config_tunnel(server_info: &Server) -> Result<TunnelConfig, String> {
     }
 
     if cfg.password.is_none() && cfg.private_key_path.is_none() && cfg.agent_sock.is_none() {
-        // Also allow password fallback if provided alongside
         if let Some(Password::Plain(ref s)) = ssh.password {
             if !s.is_empty() {
                 cfg.password = Some(s.clone());
@@ -84,21 +96,26 @@ pub fn config_tunnel(server_info: &Server) -> Result<TunnelConfig, String> {
     Ok(cfg)
 }
 
+/// Active local TCP port-forwarding listener handle that shuts down when dropped or closed.
 #[derive(Debug)]
 pub struct TunnelHandle {
+    /// Local socket address (`127.0.0.1:<port>`) where the tunnel is listening.
     pub local_addr: SocketAddr,
     shutdown: Arc<Notify>,
 }
 
 impl TunnelHandle {
+    /// Returns the local IP address string (`"127.0.0.1"`).
     pub fn local_host(&self) -> String {
         self.local_addr.ip().to_string()
     }
 
+    /// Returns the ephemeral local TCP port bound by the tunnel.
     pub fn local_port(&self) -> u16 {
         self.local_addr.port()
     }
 
+    /// Signals the background listener task to terminate.
     pub fn close(&self) {
         self.shutdown.notify_waiters();
     }
@@ -110,8 +127,7 @@ impl Drop for TunnelHandle {
     }
 }
 
-/// Starts a local TCP listener on `127.0.0.1:0` that forwards connections through SSH
-/// (or direct local bridge when targeting a local test endpoint).
+/// Starts a local TCP listener on `127.0.0.1:0` that forwards connections to the target database endpoint.
 pub async fn connect_tunnel(server_info: &Server) -> Result<TunnelHandle, String> {
     let cfg = config_tunnel(server_info)?;
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -124,16 +140,11 @@ pub async fn connect_tunnel(server_info: &Server) -> Result<TunnelHandle, String
     tokio::spawn(async move {
         loop {
             tokio::select! {
-                _ = shutdown_clone.notified() => {
-                    break;
-                }
+                _ = shutdown_clone.notified() => break,
                 accept_res = listener.accept() => {
-                    let Ok((mut inbound, _)) = accept_res else {
-                        break;
-                    };
+                    let Ok((mut inbound, _)) = accept_res else { break; };
                     let cfg_conn = cfg.clone();
                     tokio::spawn(async move {
-                        // If openssh client is used or direct forwarding
                         let target = format!("{}:{}", cfg_conn.dst_host, cfg_conn.dst_port);
                         if let Ok(mut outbound) = TcpStream::connect(&target).await {
                             let _ = copy_bidirectional(&mut inbound, &mut outbound).await;

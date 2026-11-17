@@ -1,250 +1,92 @@
+//! Database adapter traits, client registry, connection pooling, and multi-dialect facade.
+//!
+//! Provides the [`DatabaseAdapter`] and [`CancellableQuery`] traits, built-in client adapters
+//! (`sqlite`, `postgresql`, `redshift`, `mysql`, `mariadb`, `sqlserver`, `cassandra`), and
+//! high-level session management via [`DatabaseFacade`] and [`ServerSession`].
+
 pub mod dialect_adapters;
 pub mod facade;
+pub mod registry;
 pub mod sqlite;
 
-pub use dialect_adapters::*;
+pub use dialect_adapters::DialectAdapter;
 pub use facade::*;
-pub use sqlite::*;
+pub use registry::*;
+pub use sqlite::{execute_sqlite_statement, map_sqlite_err, SqliteAdapter, SqliteCancellableQuery};
 
 use crate::common::types::{
-    AdapterInfo, AdapterVersion, DatabaseFilter, ListRoutineResult, ListTableColumnsResult,
-    ListTableResult, ListViewResult, QueryRowResult, SchemaFilter, Server, TableKeysResult,
+    AdapterVersion, DatabaseFilter, ListRoutineResult, ListTableColumnsResult, ListTableResult,
+    ListViewResult, QueryRowResult, SchemaFilter, Server, TableKeysResult,
 };
 use crate::core::errors::DbCoreError;
 use async_trait::async_trait;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Arc;
 
-pub static BUILTIN_ADAPTERS: &[(&str, &str, &str, Option<u32>, Option<&str>, &[&str])] = &[
-    (
-        "mysql",
-        "MySQL",
-        "mysql",
-        Some(3306),
-        None,
-        &["server:schema", "server:domain"],
-    ),
-    (
-        "mariadb",
-        "MariaDB",
-        "mariadb",
-        Some(3306),
-        None,
-        &["server:schema", "server:domain"],
-    ),
-    (
-        "postgresql",
-        "PostgreSQL",
-        "postgres",
-        Some(5432),
-        Some("postgres"),
-        &["server:domain"],
-    ),
-    (
-        "redshift",
-        "Redshift",
-        "redshift",
-        Some(5432),
-        Some("postgres"),
-        &["server:domain"],
-    ),
-    (
-        "sqlserver",
-        "Microsoft SQL Server",
-        "mssql",
-        Some(1433),
-        None,
-        &[],
-    ),
-    (
-        "sqlite",
-        "SQLite",
-        "file",
-        None,
-        Some(":memory:"),
-        &[
-            "server:ssl",
-            "server:host",
-            "server:port",
-            "server:socketPath",
-            "server:user",
-            "server:password",
-            "server:schema",
-            "server:domain",
-            "server:ssh",
-            "cancelQuery",
-        ],
-    ),
-    (
-        "cassandra",
-        "Cassandra",
-        "cassandra",
-        Some(9042),
-        None,
-        &[
-            "server:ssl",
-            "server:socketPath",
-            "server:schema",
-            "server:domain",
-            "scriptCreateTable",
-            "cancelQuery",
-        ],
-    ),
-];
-
-pub static CLIENTS: std::sync::LazyLock<Vec<AdapterInfo>> = std::sync::LazyLock::new(|| {
-    BUILTIN_ADAPTERS
-        .iter()
-        .map(
-            |(key, name, protocol, default_port, default_database, disabled)| AdapterInfo {
-                key: (*key).to_string(),
-                name: (*name).to_string(),
-                protocol: (*protocol).to_string(),
-                default_port: *default_port,
-                default_database: default_database.map(|s| s.to_string()),
-                disabled_features: disabled.iter().map(|s| (*s).to_string()).collect(),
-            },
-        )
-        .collect()
-});
-
-pub static ADAPTERS: std::sync::LazyLock<Vec<AdapterInfo>> =
-    std::sync::LazyLock::new(|| CLIENTS.clone());
-
-static CUSTOM_ADAPTERS: OnceLock<Mutex<Vec<AdapterInfo>>> = OnceLock::new();
-
-fn custom_adapters_store() -> &'static Mutex<Vec<AdapterInfo>> {
-    CUSTOM_ADAPTERS.get_or_init(|| Mutex::new(Vec::new()))
-}
-
-pub fn get_adapters() -> Vec<AdapterInfo> {
-    let mut all = CLIENTS.clone();
-    if let Ok(guard) = custom_adapters_store().lock() {
-        all.extend(guard.iter().cloned());
-    }
-    all
-}
-
-pub fn register_adapter(adapter: AdapterInfo) -> Result<(), DbCoreError> {
-    let existing = get_adapters();
-    if existing.iter().any(|a| a.key == adapter.key) {
-        return Err(DbCoreError::AdapterAlreadyRegistered);
-    }
-    if let Ok(mut guard) = custom_adapters_store().lock() {
-        guard.push(adapter);
-    }
-    Ok(())
-}
-
-/// Identifier wrapping per database adapter
-pub fn wrap_identifier_for_adapter(adapter_key: &str, value: &str) -> String {
-    if value == "*" {
-        return "*".to_string();
-    }
-    match adapter_key {
-        "mysql" | "mariadb" => {
-            format!("`{}`", value.replace('`', "``"))
-        }
-        "sqlserver" => {
-            format!("[{}]", value.replace('[', "["))
-        }
-        _ => {
-            // postgresql, redshift, sqlite, cassandra
-            if value.len() >= 3 && value.ends_with(']') {
-                let bytes = value.as_bytes();
-                let n = bytes.len();
-                if bytes[n - 3] == b'[' && bytes[n - 2].is_ascii_digit() {
-                    let prefix = &value[..n - 3];
-                    let suffix = &value[n - 3..];
-                    return format!(
-                        "{}{}",
-                        wrap_identifier_for_adapter(adapter_key, prefix),
-                        suffix
-                    );
-                }
-            }
-            format!("\"{}\"", value.replace('"', "\"\""))
-        }
-    }
-}
-
-/// Builds the `SELECT TOP / LIMIT` query per database adapter
-pub fn build_query_select_top(
-    adapter_key: &str,
-    table: &str,
-    limit: u32,
-    schema: Option<&str>,
-) -> String {
-    match adapter_key {
-        "postgresql" | "redshift" => {
-            let s = schema.filter(|s| !s.is_empty()).unwrap_or("public");
-            format!(
-                "SELECT * FROM {}.{} LIMIT {}",
-                wrap_identifier_for_adapter(adapter_key, s),
-                wrap_identifier_for_adapter(adapter_key, table),
-                limit
-            )
-        }
-        "sqlserver" => {
-            format!(
-                "SELECT TOP {} * FROM {}",
-                limit,
-                wrap_identifier_for_adapter(adapter_key, table)
-            )
-        }
-        _ => {
-            format!(
-                "SELECT * FROM {} LIMIT {}",
-                wrap_identifier_for_adapter(adapter_key, table),
-                limit
-            )
-        }
-    }
-}
-
+/// Handle representing an in-flight or prepared SQL query that can be executed or canceled asynchronously.
 #[async_trait]
 pub trait CancellableQuery: Send + Sync {
+    /// Executes the SQL query and returns the statement results.
     async fn execute(&self) -> Result<Vec<QueryRowResult>, DbCoreError>;
+    /// Signals the database backend to abort the running query.
     async fn cancel(&self) -> Result<(), DbCoreError>;
 }
 
+/// Unified asynchronous interface implemented by all database client adapters.
 #[async_trait]
 pub trait DatabaseAdapter: Send + Sync {
+    /// Establishes a connection to the target database server and queries its version metadata.
     async fn connect(&mut self) -> Result<(), DbCoreError>;
+    /// Closes all active connections in the adapter's pool or session.
     async fn disconnect(&mut self) -> Result<(), DbCoreError>;
+    /// Returns the server's [`AdapterVersion`] discovered during [`connect`](Self::connect).
     fn get_version(&self) -> AdapterVersion;
+    /// Quotes a SQL identifier (`"ident"`, `` `ident` ``, or `[ident]`) for this adapter's dialect.
     fn wrap_identifier(&self, value: &str) -> String;
 
+    /// Lists all accessible databases or keyspaces on the server, optionally filtered by `filter`.
     async fn list_databases(
         &self,
         filter: Option<&DatabaseFilter>,
     ) -> Result<Vec<String>, DbCoreError>;
+
+    /// Lists all schemas in the current database, optionally filtered by `filter`.
     async fn list_schemas(
         &self,
         _filter: Option<&SchemaFilter>,
     ) -> Result<Vec<String>, DbCoreError> {
         Ok(Vec::new())
     }
+
+    /// Lists all user tables in the current database, optionally filtered by `filter`.
     async fn list_tables(
         &self,
         filter: Option<&SchemaFilter>,
     ) -> Result<Vec<ListTableResult>, DbCoreError>;
+
+    /// Lists all views in the current database, optionally filtered by `filter`.
     async fn list_views(
         &self,
         _filter: Option<&SchemaFilter>,
     ) -> Result<Vec<ListViewResult>, DbCoreError> {
         Ok(Vec::new())
     }
+
+    /// Lists all stored functions and procedures in the current database.
     async fn list_routines(
         &self,
         _filter: Option<&SchemaFilter>,
     ) -> Result<Vec<ListRoutineResult>, DbCoreError> {
         Ok(Vec::new())
     }
+
+    /// Lists all columns and their SQL data types for `table`.
     async fn list_table_columns(
         &self,
         table: &str,
         schema: Option<&str>,
     ) -> Result<Vec<ListTableColumnsResult>, DbCoreError>;
+
+    /// Lists all trigger names attached to `table`.
     async fn list_table_triggers(
         &self,
         _table: &str,
@@ -252,6 +94,8 @@ pub trait DatabaseAdapter: Send + Sync {
     ) -> Result<Vec<String>, DbCoreError> {
         Ok(Vec::new())
     }
+
+    /// Lists all index names defined on `table`.
     async fn list_table_indexes(
         &self,
         _table: &str,
@@ -259,6 +103,8 @@ pub trait DatabaseAdapter: Send + Sync {
     ) -> Result<Vec<String>, DbCoreError> {
         Ok(Vec::new())
     }
+
+    /// Lists all foreign-key referenced parent table names for `table`.
     async fn get_table_references(
         &self,
         _table: &str,
@@ -266,6 +112,8 @@ pub trait DatabaseAdapter: Send + Sync {
     ) -> Result<Vec<String>, DbCoreError> {
         Ok(Vec::new())
     }
+
+    /// Lists primary and foreign key constraints for `table`.
     async fn get_table_keys(
         &self,
         _table: &str,
@@ -274,9 +122,13 @@ pub trait DatabaseAdapter: Send + Sync {
         Ok(Vec::new())
     }
 
+    /// Creates a [`CancellableQuery`] handle for `query_text`.
     fn query(&self, query_text: &str) -> Result<Arc<dyn CancellableQuery>, DbCoreError>;
+
+    /// Executes `query_text` (supporting multiple semicolon-separated statements) and returns results.
     async fn execute_query(&self, query_text: &str) -> Result<Vec<QueryRowResult>, DbCoreError>;
 
+    /// Builds a dialect-specific `SELECT TOP / LIMIT` query for `table`.
     async fn get_query_select_top(
         &self,
         table: &str,
@@ -284,6 +136,7 @@ pub trait DatabaseAdapter: Send + Sync {
         schema: Option<&str>,
     ) -> Result<String, DbCoreError>;
 
+    /// Generates the `CREATE TABLE` DDL script for `table`.
     async fn get_table_create_script(
         &self,
         _table: &str,
@@ -291,6 +144,8 @@ pub trait DatabaseAdapter: Send + Sync {
     ) -> Result<Vec<String>, DbCoreError> {
         Ok(Vec::new())
     }
+
+    /// Generates the `CREATE VIEW` DDL script for `view`.
     async fn get_view_create_script(
         &self,
         _view: &str,
@@ -298,6 +153,8 @@ pub trait DatabaseAdapter: Send + Sync {
     ) -> Result<Vec<String>, DbCoreError> {
         Ok(Vec::new())
     }
+
+    /// Generates the `CREATE FUNCTION / PROCEDURE` DDL script for `routine`.
     async fn get_routine_create_script(
         &self,
         _routine: &str,
@@ -306,11 +163,14 @@ pub trait DatabaseAdapter: Send + Sync {
     ) -> Result<Vec<String>, DbCoreError> {
         Ok(Vec::new())
     }
+
+    /// Truncates or deletes all rows from all user tables in the current database/schema.
     async fn truncate_all_tables(&self, _schema: Option<&str>) -> Result<(), DbCoreError> {
         Ok(())
     }
 }
 
+/// Instantiates a boxed [`DatabaseAdapter`] for `adapter_key`.
 pub fn adapter_factory(
     adapter_key: &str,
     server: &Server,
@@ -323,9 +183,6 @@ pub fn adapter_factory(
 
     match adapter_key {
         "sqlite" => Ok(Box::new(SqliteAdapter::new(server, database))),
-        "postgresql" | "redshift" | "mysql" | "mariadb" | "sqlserver" | "cassandra" => {
-            Ok(Box::new(DialectAdapter::new(adapter_key, server, database)))
-        }
         _ => Ok(Box::new(DialectAdapter::new(adapter_key, server, database))),
     }
 }

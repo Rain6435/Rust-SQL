@@ -1,33 +1,49 @@
+//! Read-Only connection guardrail and destructive SQL query analyzer.
+
 use crate::core::sql_identifier::{identify, ExecutionType};
 use serde::{Deserialize, Serialize};
 
+/// Severity level assigned to a SQL statement by [`analyze_query_safety`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum RiskLevel {
+    /// Non-destructive query (`SELECT`, or `INSERT`/`UPDATE`/`DELETE` with a `WHERE` clause).
     Safe,
+    /// Schema-altering statement (`ALTER TABLE`, `DROP INDEX`, `DROP VIEW`).
     Warning,
+    /// High-risk destructive statement (`DELETE`/`UPDATE` without `WHERE`, `DROP TABLE`, `TRUNCATE`, or Read-Only violation).
     Critical,
 }
 
+/// Individual safety finding for a specific statement within a SQL script.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SafetyFinding {
+    /// Zero-based index of the statement in the script.
     pub statement_index: usize,
+    /// Classified command type (e.g., `"DELETE"`, `"DROP_TABLE"`).
     pub statement_type: String,
+    /// Assigned risk level.
     pub risk_level: RiskLevel,
+    /// Human-readable explanation of why the statement was flagged.
     pub reason: String,
 }
 
+/// Aggregated safety assessment for an entire SQL script.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuerySafetyReport {
+    /// Highest risk level across all statements in the script.
     pub overall_risk: RiskLevel,
+    /// `true` if the script contains only read-only statements (`SELECT`, `SHOW`, `PRAGMA`, `EXPLAIN`).
     pub is_read_only_safe: bool,
+    /// `true` if user confirmation should be requested before executing the script.
     pub requires_confirmation: bool,
+    /// List of individual findings.
     pub findings: Vec<SafetyFinding>,
 }
 
-/// Analyzes a SQL script for read-only compliance and destructive operations
+/// Analyzes `query_text` for Read-Only compliance and destructive operations
 /// (such as `DELETE` or `UPDATE` without a `WHERE` clause, `DROP`, or `TRUNCATE`).
 pub fn analyze_query_safety(query_text: &str, read_only_mode: bool) -> QuerySafetyReport {
     let statements = identify(query_text, false).unwrap_or_default();
@@ -45,7 +61,8 @@ pub fn analyze_query_safety(query_text: &str, read_only_mode: bool) -> QuerySafe
         }
 
         if read_only_mode && is_mod {
-            let finding = SafetyFinding {
+            overall_risk = RiskLevel::Critical;
+            findings.push(SafetyFinding {
                 statement_index: idx,
                 statement_type: st_type.to_string(),
                 risk_level: RiskLevel::Critical,
@@ -54,40 +71,34 @@ pub fn analyze_query_safety(query_text: &str, read_only_mode: bool) -> QuerySafe
                     idx + 1,
                     st_type
                 ),
-            };
-            overall_risk = RiskLevel::Critical;
-            findings.push(finding);
+            });
             continue;
         }
 
         match st_type {
-            "DELETE" => {
-                if !has_where_clause(&stmt.text) {
-                    overall_risk = overall_risk.max(RiskLevel::Critical);
-                    findings.push(SafetyFinding {
-                        statement_index: idx,
-                        statement_type: st_type.to_string(),
-                        risk_level: RiskLevel::Critical,
-                        reason: format!(
-                            "Statement #{}: DELETE without a WHERE clause will delete all rows in the table.",
-                            idx + 1
-                        ),
-                    });
-                }
+            "DELETE" if !has_where_clause(&stmt.text) => {
+                overall_risk = overall_risk.max(RiskLevel::Critical);
+                findings.push(SafetyFinding {
+                    statement_index: idx,
+                    statement_type: st_type.to_string(),
+                    risk_level: RiskLevel::Critical,
+                    reason: format!(
+                        "Statement #{}: DELETE without a WHERE clause will delete all rows in the table.",
+                        idx + 1
+                    ),
+                });
             }
-            "UPDATE" => {
-                if !has_where_clause(&stmt.text) {
-                    overall_risk = overall_risk.max(RiskLevel::Critical);
-                    findings.push(SafetyFinding {
-                        statement_index: idx,
-                        statement_type: st_type.to_string(),
-                        risk_level: RiskLevel::Critical,
-                        reason: format!(
-                            "Statement #{}: UPDATE without a WHERE clause will modify all rows in the table.",
-                            idx + 1
-                        ),
-                    });
-                }
+            "UPDATE" if !has_where_clause(&stmt.text) => {
+                overall_risk = overall_risk.max(RiskLevel::Critical);
+                findings.push(SafetyFinding {
+                    statement_index: idx,
+                    statement_type: st_type.to_string(),
+                    risk_level: RiskLevel::Critical,
+                    reason: format!(
+                        "Statement #{}: UPDATE without a WHERE clause will modify all rows in the table.",
+                        idx + 1
+                    ),
+                });
             }
             "DROP_DATABASE" | "DROP_SCHEMA" | "DROP_TABLE" | "TRUNCATE" => {
                 overall_risk = overall_risk.max(RiskLevel::Critical);
@@ -134,27 +145,22 @@ fn has_where_clause(sql: &str) -> bool {
     let bytes = sql.as_bytes();
     let mut cleaned = String::with_capacity(sql.len());
 
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
+    for &b in bytes {
         if b == b'\'' && !in_double {
             in_single = !in_single;
             cleaned.push(' ');
-            i += 1;
             continue;
         }
         if b == b'"' && !in_single {
             in_double = !in_double;
             cleaned.push(' ');
-            i += 1;
             continue;
         }
-        if !in_single && !in_double {
-            cleaned.push(b as char);
+        cleaned.push(if !in_single && !in_double {
+            b as char
         } else {
-            cleaned.push(' ');
-        }
-        i += 1;
+            ' '
+        });
     }
 
     cleaned

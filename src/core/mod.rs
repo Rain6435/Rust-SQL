@@ -1,3 +1,6 @@
+//! Core engine modules for configuration, cryptography, SQL parsing/formatting, safety,
+//! parameter binding, bookmarks, result operations, export, SSH tunneling, and validation.
+
 pub mod bookmarks;
 pub mod config;
 pub mod connection_string;

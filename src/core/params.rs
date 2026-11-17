@@ -1,8 +1,10 @@
+//! Parameterized SQL query placeholder extraction (`:param`, `@param`, `$1`) and safe literal binding.
+
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// Extracts all unique named parameters (`:param_name`, `@param_name`, `$1`) outside of string literals
-/// and comments, skipping PostgreSQL `::type` casts.
+/// Extracts all unique named (`:param_name`, `@param_name`) and positional (`$1`) parameters
+/// outside of string literals and comments, skipping PostgreSQL `::type` casts and `@@system` variables.
 pub fn extract_query_parameters(sql: &str) -> Vec<String> {
     let mut params = Vec::new();
     let bytes = sql.as_bytes();
@@ -63,12 +65,10 @@ pub fn extract_query_parameters(sql: &str) -> Vec<String> {
         }
 
         if !in_single && !in_double {
-            // Skip PostgreSQL `::` cast operator
             if c == b':' && next == Some(b':') {
                 i += 2;
                 continue;
             }
-            // Skip SQL Server `@@version` system variables
             if c == b'@' && next == Some(b'@') {
                 i += 2;
                 continue;
@@ -113,7 +113,7 @@ pub fn extract_query_parameters(sql: &str) -> Vec<String> {
     params
 }
 
-/// Safely binds named (`:name`, `@name`) and positional (`$1`) parameters into a SQL query
+/// Safely binds named (`:name`, `@name`) and positional (`$1`) parameters into `sql`
 /// with proper SQL literal escaping.
 pub fn bind_query_parameters(sql: &str, params: &HashMap<String, Value>) -> String {
     if params.is_empty() {
@@ -205,6 +205,7 @@ pub fn bind_query_parameters(sql: &str, params: &HashMap<String, Value>) -> Stri
     out
 }
 
+/// Formats a JSON `Value` as a safely escaped SQL literal (`NULL`, `TRUE`, `FALSE`, numeric, or single-quoted string).
 pub fn format_sql_literal(val: &Value) -> String {
     match val {
         Value::Null => "NULL".to_string(),

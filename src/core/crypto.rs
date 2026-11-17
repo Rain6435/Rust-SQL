@@ -1,3 +1,5 @@
+//! AES-256-CBC password encryption and decryption for saved server credentials.
+
 use crate::common::types::EncryptedPassword;
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
@@ -7,26 +9,33 @@ use thiserror::Error;
 type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
+/// Cryptographic error variants returned during password encryption or decryption.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum CryptoError {
+    /// Attempted to encrypt an empty plaintext string.
     #[error("Missing plain text")]
     MissingPlainText,
+    /// Attempted to encrypt with an empty secret key.
     #[error("Missing encrypt secret")]
     MissingEncryptSecret,
+    /// Encrypted payload is missing its IV or ciphertext.
     #[error("Invalid encrypted valued")]
     InvalidEncryptedValue,
+    /// Attempted to decrypt with an empty secret key.
     #[error("Missing decrypt secret")]
     MissingDecryptSecret,
+    /// Base64 decoding, IV length, or PKCS#7 unpadding failed.
     #[error("The encrypted value is not a valid format")]
     InvalidEncryptedFormat,
+    /// Derived key length is invalid.
     #[error("The secret is not valid format")]
     InvalidSecretFormat,
+    /// Legacy non-IV cipher format is deprecated and rejected.
     #[error("This method is no longer implemented. You will need to delete any existing ecrypted values and re-encrypt them using the new encrypt method")]
     UnsafeDecryptDeprecated,
 }
 
-/// Derive the 32-byte key identically to Node.js:
-/// `let key = Buffer.alloc(32); key = Buffer.concat([Buffer.from(secret)], key.length);`
+/// Derives a 32-byte AES-256 key from `secret` by zero-padding or truncating to 32 bytes.
 fn derive_key(secret: &str) -> [u8; 32] {
     let mut key = [0u8; 32];
     let bytes = secret.as_bytes();
@@ -35,6 +44,7 @@ fn derive_key(secret: &str) -> [u8; 32] {
     key
 }
 
+/// Encrypts `plain_text` using AES-256-CBC with a random 16-byte IV and PKCS#7 padding.
 pub fn encrypt(plain_text: &str, secret: &str) -> Result<EncryptedPassword, CryptoError> {
     if plain_text.is_empty() {
         return Err(CryptoError::MissingPlainText);
@@ -61,6 +71,7 @@ pub fn encrypt(plain_text: &str, secret: &str) -> Result<EncryptedPassword, Cryp
     })
 }
 
+/// Decrypts an [`EncryptedPassword`] using AES-256-CBC and `secret`.
 pub fn decrypt(encrypted: &EncryptedPassword, secret: &str) -> Result<String, CryptoError> {
     if encrypted.iv_text.is_empty() || encrypted.encrypted_text.is_empty() {
         return Err(CryptoError::InvalidEncryptedValue);
@@ -91,6 +102,7 @@ pub fn decrypt(encrypted: &EncryptedPassword, secret: &str) -> Result<String, Cr
     String::from_utf8(pt.to_vec()).map_err(|_| CryptoError::InvalidEncryptedFormat)
 }
 
+/// Rejects legacy un-salted cipher strings and instructs the caller to re-encrypt with [`encrypt`].
 pub fn unsafe_decrypt(_encrypted_text: &str, _secret: &str) -> Result<String, CryptoError> {
     Err(CryptoError::UnsafeDecryptDeprecated)
 }

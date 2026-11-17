@@ -1,6 +1,8 @@
+//! String formatting, regular expression escaping, version comparison, and value conversion utilities.
+
 use serde_json::{Map, Value};
 
-/// Capitalize first character and lowercase the rest, matching `src/common/utils/string.ts`
+/// Capitalizes the first character of `s` and lowercases the remainder.
 pub fn titlize(s: &str) -> String {
     let mut chars = s.chars();
     match chars.next() {
@@ -9,7 +11,7 @@ pub fn titlize(s: &str) -> String {
     }
 }
 
-/// Escape regex special characters, matching `src/renderer/utils/regexp.ts`
+/// Escapes regular expression metacharacters in `s` so it can be safely embedded in a regex pattern.
 pub fn escape_regexp_string(s: &str) -> String {
     let special = [
         '\\', '^', '$', '*', '+', '?', '.', '(', ')', '|', '{', '}', '[', ']',
@@ -24,7 +26,7 @@ pub fn escape_regexp_string(s: &str) -> String {
     out
 }
 
-/// Convert a JSON value to its display/export string representation
+/// Converts a JSON `Value` from a database row into its display and export string representation.
 pub fn value_to_string(value: &Value) -> String {
     match value {
         Value::Null => "NULL".to_string(),
@@ -32,7 +34,6 @@ pub fn value_to_string(value: &Value) -> String {
         Value::Number(n) => n.to_string(),
         Value::String(s) => s.clone(),
         Value::Array(arr) => {
-            // Check if this is a byte buffer representation (e.g. array of u8)
             if !arr.is_empty()
                 && arr
                     .iter()
@@ -49,7 +50,6 @@ pub fn value_to_string(value: &Value) -> String {
             serde_json::to_string(value).unwrap_or_default()
         }
         Value::Object(obj) => {
-            // Handle Node Buffer JSON representation: {"type": "Buffer", "data": [...]}
             if obj.get("type").and_then(|v| v.as_str()) == Some("Buffer") {
                 if let Some(Value::Array(data)) = obj.get("data") {
                     let bytes: Vec<u8> = data
@@ -67,6 +67,7 @@ pub fn value_to_string(value: &Value) -> String {
     }
 }
 
+/// Converts every cell in a single row map into a `Value::String`.
 pub fn row_values_to_string(row: &Map<String, Value>) -> Map<String, Value> {
     let mut parsed = Map::new();
     for (k, v) in row {
@@ -75,11 +76,14 @@ pub fn row_values_to_string(row: &Map<String, Value>) -> Map<String, Value> {
     parsed
 }
 
+/// Converts every cell across a slice of rows into `Value::String` representations.
 pub fn rows_values_to_string(rows: &[Map<String, Value>]) -> Vec<Map<String, Value>> {
     rows.iter().map(row_values_to_string).collect()
 }
 
-/// Compare two dot-separated version strings
+/// Compares two dot-separated version strings component by component up to the shorter prefix length.
+///
+/// Returns `1` if `a > b`, `-1` if `a < b` (or if a segment is non-numeric), and `0` if equal.
 pub fn version_compare(a: &str, b: &str) -> i32 {
     let a_parts: Vec<&str> = a.split('.').collect();
     let b_parts: Vec<&str> = b.split('.').collect();
@@ -104,13 +108,13 @@ pub fn version_compare(a: &str, b: &str) -> i32 {
     0
 }
 
-/// Trims leading/trailing newlines and ensures the statement ends with `;`
+/// Trims leading and trailing newlines from `sql` and ensures it ends with a semicolon (`;`).
 pub fn append_semi_colon(sql: &str) -> String {
     let trimmed = sql.trim_matches('\n');
     if trimmed.ends_with(';') {
         trimmed.to_string()
     } else {
-        format!("{};", trimmed)
+        format!("{trimmed};")
     }
 }
 
@@ -149,11 +153,7 @@ mod tests {
             ("8", "12", -1),
         ];
         for (a, b, expected) in cases {
-            assert_eq!(
-                version_compare(a, b),
-                expected,
-                "version_compare({a}, {b}) should be {expected}"
-            );
+            assert_eq!(version_compare(a, b), expected);
         }
     }
 

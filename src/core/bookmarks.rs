@@ -1,19 +1,28 @@
+//! Saved SQL bookmark/snippet library and searchable query execution audit log.
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Reusable SQL query bookmark with tags and optional target database client type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SqlBookmark {
+    /// Unique UUID identifier.
     pub id: String,
+    /// Human-readable title for the bookmark.
     pub title: String,
+    /// SQL statement or script body.
     pub sql: String,
+    /// User-assigned searchable tags.
     #[serde(default)]
     pub tags: Vec<String>,
+    /// Optional database client key (`postgresql`, `mysql`, etc.).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client: Option<String>,
 }
 
 impl SqlBookmark {
+    /// Creates a new [`SqlBookmark`] with a generated UUID.
     pub fn new(title: &str, sql: &str, tags: Vec<String>, client: Option<String>) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
@@ -25,32 +34,45 @@ impl SqlBookmark {
     }
 }
 
+/// Audit log entry recording a single SQL query execution.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryHistoryEntry {
+    /// Monotonically increasing execution identifier.
     pub id: u64,
+    /// Target database name.
     pub database: String,
+    /// Executed SQL text.
     pub sql: String,
+    /// Execution duration in milliseconds.
     pub duration_ms: u64,
+    /// Total rows returned across all statements.
     pub row_count: usize,
+    /// Whether the query completed without error.
     pub success: bool,
+    /// Error message if execution failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
 
+/// Manager for saved [`SqlBookmark`] items and recent [`QueryHistoryEntry`] audit records.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookmarkManager {
+    /// Saved SQL bookmarks.
     pub bookmarks: Vec<SqlBookmark>,
+    /// Recent query execution history entries (newest first, capped at 500).
     pub history: Vec<QueryHistoryEntry>,
     next_history_id: u64,
 }
 
 impl BookmarkManager {
+    /// Creates an empty [`BookmarkManager`].
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Creates and stores a new [`SqlBookmark`].
     pub fn add_bookmark(
         &mut self,
         title: &str,
@@ -63,12 +85,14 @@ impl BookmarkManager {
         bm
     }
 
+    /// Removes a bookmark by its `id`, returning `true` if an entry was removed.
     pub fn remove_bookmark(&mut self, id: &str) -> bool {
         let before = self.bookmarks.len();
         self.bookmarks.retain(|b| b.id != id);
         self.bookmarks.len() < before
     }
 
+    /// Filters bookmarks case-insensitively by `title`, `sql`, or `tags`.
     pub fn search_bookmarks(&self, filter: &str) -> Vec<&SqlBookmark> {
         let q = filter.trim().to_lowercase();
         if q.is_empty() {
@@ -84,6 +108,7 @@ impl BookmarkManager {
             .collect()
     }
 
+    /// Appends a new [`QueryHistoryEntry`] to the front of the history log (retaining up to 500 entries).
     pub fn record_history(
         &mut self,
         database: &str,
@@ -109,6 +134,7 @@ impl BookmarkManager {
         entry
     }
 
+    /// Filters execution history entries case-insensitively by `sql` or `database`.
     pub fn search_history(&self, filter: &str) -> Vec<&QueryHistoryEntry> {
         let q = filter.trim().to_lowercase();
         if q.is_empty() {
@@ -120,6 +146,7 @@ impl BookmarkManager {
             .collect()
     }
 
+    /// Clears all recorded execution history entries.
     pub fn clear_history(&mut self) {
         self.history.clear();
     }

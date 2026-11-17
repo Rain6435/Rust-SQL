@@ -1,126 +1,9 @@
-use crate::common::types::{Password, Server, ServerResult};
-use crate::core::config;
+//! Encryption and decryption helpers for database and SSH passwords on [`Server`] profiles.
+
+use crate::common::types::{Password, Server};
 use crate::core::crypto;
-use crate::core::validators::{validate, validate_unique_id};
-use uuid::Uuid;
 
-pub async fn get_all() -> Result<Vec<Server>, String> {
-    get_all_sync()
-}
-
-pub fn get_all_sync() -> Result<Vec<Server>, String> {
-    let cfg = config::get_sync()?;
-    Ok(cfg.servers)
-}
-
-pub async fn add(server: &Server, crypto_secret: &str) -> Result<ServerResult, String> {
-    add_sync(server, crypto_secret)
-}
-
-pub fn add_sync(server: &Server, crypto_secret: &str) -> Result<ServerResult, String> {
-    let mut srv = match validate(server) {
-        Ok(s) => s,
-        Err(e) => {
-            return Ok(ServerResult {
-                data: None,
-                validation_errors: Some(e.validation_errors),
-            });
-        }
-    };
-
-    let mut data = config::get_sync()?;
-    let new_id = loop {
-        let candidate = Uuid::new_v4().to_string();
-        if validate_unique_id(&data.servers, Some(&candidate)).unwrap_or(false) {
-            break candidate;
-        }
-    };
-
-    srv = encrypt_secrets(&srv, crypto_secret, None)?;
-    srv.id = new_id;
-    data.servers.push(srv.clone());
-    config::save_sync(&data)?;
-
-    Ok(ServerResult {
-        data: Some(srv),
-        validation_errors: None,
-    })
-}
-
-pub async fn update(server: &Server, crypto_secret: &str) -> Result<ServerResult, String> {
-    update_sync(server, crypto_secret)
-}
-
-pub fn update_sync(server: &Server, crypto_secret: &str) -> Result<ServerResult, String> {
-    let mut srv = match validate(server) {
-        Ok(s) => s,
-        Err(e) => {
-            return Ok(ServerResult {
-                data: None,
-                validation_errors: Some(e.validation_errors),
-            });
-        }
-    };
-
-    let mut data = config::get_sync()?;
-    let index = data.servers.iter().position(|item| item.id == srv.id);
-    let old_server = index.map(|i| &data.servers[i]);
-    srv = encrypt_secrets(&srv, crypto_secret, old_server)?;
-
-    if let Some(i) = index {
-        data.servers[i] = srv.clone();
-    } else {
-        data.servers.push(srv.clone());
-    }
-
-    config::save_sync(&data)?;
-
-    Ok(ServerResult {
-        data: Some(srv),
-        validation_errors: None,
-    })
-}
-
-pub async fn add_or_update(server: &Server, crypto_secret: &str) -> Result<ServerResult, String> {
-    add_or_update_sync(server, crypto_secret)
-}
-
-pub fn add_or_update_sync(server: &Server, crypto_secret: &str) -> Result<ServerResult, String> {
-    let has_id = !server.id.trim().is_empty();
-    if has_id {
-        update_sync(server, crypto_secret)
-    } else {
-        add_sync(server, crypto_secret)
-    }
-}
-
-pub async fn remove_by_id(id: &str) -> Result<(), String> {
-    remove_by_id_sync(id)
-}
-
-pub fn remove_by_id_sync(id: &str) -> Result<(), String> {
-    let mut data = config::get_sync()?;
-    data.servers.retain(|srv| srv.id != id);
-    config::save_sync(&data)
-}
-
-/// Generates a unique duplicate name by appending `-1`, `-2`, ... (`getUniqueName` in `src/renderer/actions/servers.ts`)
-pub fn get_unique_name(server: &Server, existing_servers: &[Server]) -> String {
-    let base_name = server.name.clone();
-    let exists = |candidate: &str| existing_servers.iter().any(|s| s.name == candidate);
-    if !exists(&base_name) {
-        return base_name;
-    }
-    let mut num = 1usize;
-    loop {
-        let candidate = format!("{base_name}-{num}");
-        if !exists(&candidate) {
-            return candidate;
-        }
-        num += 1;
-    }
-}
-
+/// Encrypts plaintext database and SSH passwords on `server` using `crypto_secret`.
 pub fn encrypt_secrets(
     server: &Server,
     crypto_secret: &str,
@@ -166,7 +49,7 @@ pub fn encrypt_secrets(
     Ok(updated)
 }
 
-/// Decrypts server passwords (`decryptSecrects` in `src/browser/core/servers.ts`)
+/// Decrypts encrypted database and SSH passwords on `server` into plaintext in memory.
 pub fn decrypt_secrets(server: &Server, crypto_secret: &str) -> Result<Server, String> {
     let mut updated = server.clone();
     if server.encrypted != Some(true) {

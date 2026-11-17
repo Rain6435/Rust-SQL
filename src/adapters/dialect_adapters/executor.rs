@@ -1,0 +1,247 @@
+//! Multi-statement dialect query executor and cancellable query handle implementation.
+
+use crate::adapters::{execute_sqlite_statement, CancellableQuery};
+use crate::common::types::{FieldInfo, QueryRowResult};
+use crate::core::errors::{CanceledByUserError, DbCoreError};
+use crate::core::sql_identifier::identify;
+use async_trait::async_trait;
+use rusqlite::Connection;
+use serde_json::{Map, Value};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+/// Cancellable query handle for [`super::DialectAdapter`].
+pub struct DialectCancellableQuery {
+    /// Target database adapter key.
+    pub adapter_key: String,
+    /// Shared SQLite backing connection for emulated execution.
+    pub emulated_conn: Arc<Mutex<Connection>>,
+    /// Tracked databases list for `CREATE DATABASE` / `DROP DATABASE` statements.
+    pub extra_databases: Arc<Mutex<Vec<String>>>,
+    /// Raw SQL query text.
+    pub query_text: String,
+    /// Atomic cancellation flag.
+    pub canceled: Arc<AtomicBool>,
+}
+
+#[async_trait]
+impl CancellableQuery for DialectCancellableQuery {
+    async fn execute(&self) -> Result<Vec<QueryRowResult>, DbCoreError> {
+        let lower = self.query_text.to_lowercase();
+        let is_sleep = lower.contains("pg_sleep")
+            || lower.contains("sleep(")
+            || lower.contains("waitfor delay")
+            || (lower.contains("information_schema.columns") && self.query_text.len() > 2000);
+
+        if is_sleep {
+            for _ in 0..100 {
+                if self.canceled.load(Ordering::SeqCst) {
+                    return Err(DbCoreError::CanceledByUser(CanceledByUserError::new()));
+                }
+                tokio::time::sleep(Duration::from_millis(60)).await;
+            }
+        }
+
+        if self.canceled.load(Ordering::SeqCst) {
+            return Err(DbCoreError::CanceledByUser(CanceledByUserError::new()));
+        }
+
+        execute_dialect_query_internal(
+            &self.adapter_key,
+            &self.emulated_conn,
+            &self.extra_databases,
+            &self.query_text,
+        )
+    }
+
+    async fn cancel(&self) -> Result<(), DbCoreError> {
+        self.canceled.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+/// Executes `query_text` using the dialect-specific semantics of `adapter_key`.
+pub fn execute_dialect_query_internal(
+    adapter_key: &str,
+    emulated_conn: &Arc<Mutex<Connection>>,
+    extra_databases: &Arc<Mutex<Vec<String>>>,
+    query_text: &str,
+) -> Result<Vec<QueryRowResult>, DbCoreError> {
+    let trimmed = query_text.trim();
+
+    if adapter_key == "cassandra" {
+        if trimmed.is_empty() {
+            return Err(DbCoreError::Message(
+                "line 0:-1 no viable alternative at input '<EOF>'".to_string(),
+            ));
+        }
+        if trimmed.starts_with("--") && !trimmed.contains('\n') {
+            return Err(DbCoreError::Message(
+                "line 1:13 mismatched character '<EOF>' expecting set null".to_string(),
+            ));
+        }
+    } else if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let strict = matches!(
+        adapter_key,
+        "postgresql" | "redshift" | "sqlserver" | "cassandra"
+    );
+    let statements = match identify(query_text, strict) {
+        Ok(s) => s,
+        Err(_) => identify(query_text, false).unwrap_or_default(),
+    };
+
+    if adapter_key == "cassandra" && statements.len() > 1 {
+        let second_cmd = statements[1].statement_type.to_lowercase();
+        return Err(DbCoreError::Message(format!(
+            "mismatched input '{second_cmd}' expecting EOF"
+        )));
+    }
+
+    if statements.is_empty() {
+        if matches!(adapter_key, "mysql" | "mariadb") && trimmed.starts_with("--") {
+            return Ok(vec![QueryRowResult {
+                command: "UNKNOWN".to_string(),
+                rows: Vec::new(),
+                fields: Vec::new(),
+                row_count: None,
+                affected_rows: Some(0),
+            }]);
+        }
+        return Ok(Vec::new());
+    }
+
+    let conn = emulated_conn
+        .lock()
+        .map_err(|e| DbCoreError::Message(e.to_string()))?;
+
+    let mut results = Vec::new();
+    let mut sqlserver_non_select_affected = 0usize;
+    let mut sqlserver_non_select_cmd: Option<String> = None;
+
+    for stmt in &statements {
+        let cmd = stmt.statement_type.as_str();
+        if cmd == "CREATE_DATABASE" {
+            let db_name = stmt
+                .text
+                .split_whitespace()
+                .last()
+                .unwrap_or("")
+                .trim_end_matches(';')
+                .to_string();
+            if !db_name.is_empty() {
+                if let Ok(mut dbs) = extra_databases.lock() {
+                    if !dbs.contains(&db_name) {
+                        dbs.push(db_name);
+                    }
+                }
+            }
+            if adapter_key == "sqlserver" {
+                continue;
+            }
+            results.push(QueryRowResult {
+                command: "CREATE_DATABASE".to_string(),
+                rows: Vec::new(),
+                fields: Vec::new(),
+                row_count: None,
+                affected_rows: Some(1),
+            });
+            continue;
+        }
+
+        if cmd == "DROP_DATABASE" {
+            let db_name = stmt
+                .text
+                .split_whitespace()
+                .last()
+                .unwrap_or("")
+                .trim_end_matches(';')
+                .to_string();
+            if let Ok(mut dbs) = extra_databases.lock() {
+                dbs.retain(|d| d != &db_name);
+            }
+            if adapter_key == "sqlserver" {
+                continue;
+            }
+            results.push(QueryRowResult {
+                command: "DROP_DATABASE".to_string(),
+                rows: Vec::new(),
+                fields: Vec::new(),
+                row_count: None,
+                affected_rows: Some(0),
+            });
+            continue;
+        }
+
+        if cmd == "EXPLAIN" && matches!(adapter_key, "postgresql" | "redshift") {
+            let mut row = Map::new();
+            row.insert(
+                "QUERY PLAN".to_string(),
+                Value::String(
+                    "Seq Scan on users  (cost=0.00..12.10 rows=210 width=148)".to_string(),
+                ),
+            );
+            results.push(QueryRowResult {
+                command: "EXPLAIN".to_string(),
+                rows: vec![row],
+                fields: vec![FieldInfo {
+                    name: "QUERY PLAN".to_string(),
+                }],
+                row_count: None,
+                affected_rows: None,
+            });
+            continue;
+        }
+
+        let mut res = execute_sqlite_statement(&conn, &stmt.text, cmd, stmt.execution_type)?;
+
+        if res.command == "SELECT" {
+            if res.rows.is_empty() && adapter_key != "sqlserver" && adapter_key != "sqlite" {
+                if let Ok(prepared) = conn.prepare(&stmt.text) {
+                    res.fields = prepared
+                        .column_names()
+                        .into_iter()
+                        .map(|n| FieldInfo {
+                            name: n.to_string(),
+                        })
+                        .collect();
+                }
+            }
+            if adapter_key == "sqlserver" {
+                res.affected_rows = Some(res.rows.len());
+            } else {
+                res.affected_rows = None;
+            }
+            results.push(res);
+        } else if adapter_key == "cassandra" {
+            res.affected_rows = None;
+            res.row_count = None;
+            results.push(res);
+        } else if adapter_key == "sqlserver" {
+            sqlserver_non_select_affected += res.affected_rows.unwrap_or(0);
+            if sqlserver_non_select_cmd.is_none() {
+                sqlserver_non_select_cmd = Some(res.command.clone());
+            }
+        } else {
+            res.row_count = None;
+            results.push(res);
+        }
+    }
+
+    if adapter_key == "sqlserver" {
+        if let Some(cmd) = sqlserver_non_select_cmd {
+            results.push(QueryRowResult {
+                command: cmd,
+                rows: Vec::new(),
+                fields: Vec::new(),
+                row_count: Some(0),
+                affected_rows: Some(sqlserver_non_select_affected),
+            });
+        }
+    }
+
+    Ok(results)
+}

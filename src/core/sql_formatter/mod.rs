@@ -1,4 +1,10 @@
-/// Multi-dialect SQL formatter (`Mod-i` / `BROWSER_MENU_EDITOR_FORMAT`).
+//! Multi-dialect SQL query formatter and pretty-printer (`Ctrl+I` / `BROWSER_MENU_EDITOR_FORMAT`).
+
+pub mod tokenizer;
+
+use tokenizer::{is_sql_keyword, tokenize_sql};
+
+/// Formats a raw SQL `query` string with consistent clause indentation and uppercased SQL keywords.
 pub fn format_sql(query: &str, client: Option<&str>) -> String {
     let trimmed = query.trim();
     if trimmed.is_empty() {
@@ -82,7 +88,6 @@ pub fn format_sql(query: &str, client: Option<&str>) -> String {
             continue;
         }
 
-        // Check two-word major clauses
         let upper = tok.to_uppercase();
         let next_upper = tokens.get(i + 1).map(|s| s.to_uppercase());
         let two_word = next_upper.as_ref().map(|n| format!("{upper} {n}"));
@@ -155,127 +160,6 @@ pub fn format_sql(query: &str, client: Option<&str>) -> String {
     }
 
     out.trim().to_string()
-}
-
-fn is_sql_keyword(upper: &str) -> bool {
-    matches!(
-        upper,
-        "SELECT"
-            | "FROM"
-            | "WHERE"
-            | "AND"
-            | "OR"
-            | "NOT"
-            | "NULL"
-            | "IS"
-            | "IN"
-            | "AS"
-            | "ON"
-            | "JOIN"
-            | "LEFT"
-            | "RIGHT"
-            | "INNER"
-            | "OUTER"
-            | "FULL"
-            | "CROSS"
-            | "GROUP"
-            | "BY"
-            | "ORDER"
-            | "ASC"
-            | "DESC"
-            | "HAVING"
-            | "LIMIT"
-            | "OFFSET"
-            | "TOP"
-            | "DISTINCT"
-            | "ALL"
-            | "UNION"
-            | "INSERT"
-            | "INTO"
-            | "VALUES"
-            | "UPDATE"
-            | "SET"
-            | "DELETE"
-            | "CREATE"
-            | "TABLE"
-            | "VIEW"
-            | "INDEX"
-            | "TRIGGER"
-            | "PROCEDURE"
-            | "FUNCTION"
-            | "DATABASE"
-            | "SCHEMA"
-            | "DROP"
-            | "ALTER"
-            | "TRUNCATE"
-            | "PRIMARY"
-            | "KEY"
-            | "FOREIGN"
-            | "REFERENCES"
-            | "DEFAULT"
-            | "CASE"
-            | "WHEN"
-            | "THEN"
-            | "ELSE"
-            | "END"
-            | "EXISTS"
-            | "BETWEEN"
-            | "LIKE"
-            | "COUNT"
-            | "SUM"
-            | "AVG"
-            | "MIN"
-            | "MAX"
-    )
-}
-
-fn tokenize_sql(sql: &str) -> Vec<String> {
-    let mut tokens = Vec::new();
-    let chars: Vec<char> = sql.chars().collect();
-    let len = chars.len();
-    let mut i = 0;
-
-    while i < len {
-        let c = chars[i];
-        if c.is_whitespace() {
-            i += 1;
-            continue;
-        }
-        if matches!(c, ',' | ';' | '(' | ')') {
-            tokens.push(c.to_string());
-            i += 1;
-            continue;
-        }
-        if matches!(c, '\'' | '"' | '`') {
-            let quote = c;
-            let mut s = String::new();
-            s.push(quote);
-            i += 1;
-            while i < len {
-                s.push(chars[i]);
-                if chars[i] == quote {
-                    if i + 1 < len && chars[i + 1] == quote {
-                        s.push(chars[i + 1]);
-                        i += 2;
-                        continue;
-                    }
-                    i += 1;
-                    break;
-                }
-                i += 1;
-            }
-            tokens.push(s);
-            continue;
-        }
-        let mut word = String::new();
-        while i < len && !chars[i].is_whitespace() && !matches!(chars[i], ',' | ';' | '(' | ')') {
-            word.push(chars[i]);
-            i += 1;
-        }
-        tokens.push(word);
-    }
-
-    tokens
 }
 
 #[cfg(test)]
