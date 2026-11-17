@@ -1,0 +1,147 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.39.0)'
+        required: false
+        default: 'v1.39.0'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: Rust-SQL
+
+jobs:
+  build-release:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive_ext: tar.gz
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            archive_ext: tar.gz
+          - os: macos-13
+            target: x86_64-apple-darwin
+            archive_ext: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive_ext: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive_ext: zip
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libssl-dev \
+            libsqlite3-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libgtk-3-dev \
+            libgl1-mesa-dev \
+            libegl1-mesa-dev \
+            libfontconfig1-dev \
+            libfreetype-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package release archive (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME:-${{ inputs.tag || 'v1.39.0' }}}"
+          STAGE_DIR="${BINARY_NAME}-${VERSION}-${{ matrix.target }}"
+          mkdir -p "dist/${STAGE_DIR}"
+          cp "target/${{ matrix.target }}/release/${BINARY_NAME}" "dist/${STAGE_DIR}/"
+          cp README.md LICENSE CHANGELOG.md "dist/${STAGE_DIR}/"
+          cp -r docs "dist/${STAGE_DIR}/"
+          tar -C dist -czf "dist/${STAGE_DIR}.tar.gz" "${STAGE_DIR}"
+          cd dist && sha256sum "${STAGE_DIR}.tar.gz" > "${STAGE_DIR}.tar.gz.sha256"
+
+      - name: Package release archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $Version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "${{ inputs.tag }}" }
+          $StageDir = "$env:BINARY_NAME-$Version-${{ matrix.target }}"
+          New-Item -ItemType Directory -Force -Path "dist/$StageDir"
+          Copy-Item "target/${{ matrix.target }}/release/$env:BINARY_NAME.exe" "dist/$StageDir/"
+          Copy-Item README.md, LICENSE, CHANGELOG.md "dist/$StageDir/"
+          Copy-Item -Recurse docs "dist/$StageDir/"
+          Compress-Archive -Path "dist/$StageDir" -DestinationPath "dist/$StageDir.zip"
+          $Hash = (Get-FileHash "dist/$StageDir.zip" -Algorithm SHA256).Hash.ToLower()
+          "$Hash  $StageDir.zip" | Out-File -Encoding ascii "dist/$StageDir.zip.sha256"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: build-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Consolidate SHA256 checksums
+        run: |
+          cd artifacts
+          cat *.sha256 > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
+            artifacts/SHA256SUMS.txt

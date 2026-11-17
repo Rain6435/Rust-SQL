@@ -1,0 +1,47 @@
+[package]
+name = "Rust-SQL"
+version = "1.39.0"
+edition = "2021"
+authors = ["The Sqlectron Team <maxcnunes@gmail.com>", "Rust-SQL Contributors"]
+description = "A simple and lightweight SQL client with cross database and platform support (Rust clone of Sqlectron)"
+license = "MIT"
+homepage = "https://github.com/Rain6435/Rust-SQL"
+repository = "https://github.com/Rain6435/Rust-SQL"
+default-run = "Rust-SQL"
+
+[lib]
+name = "rust_sql"
+path = "src/lib.rs"
+
+[[bin]]
+name = "Rust-SQL"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.40", features = ["full"] }
+async-trait = "0.1"
+thiserror = "1.0"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc", "block-padding"] }
+base64 = "0.22"
+rand = "0.8"
+csv = "1.3"
+regex = "1.10"
+url = "2.5"
+dirs = "5.0"
+log = "0.4"
+env_logger = "0.11"
+rusqlite = { version = "0.32", features = ["column_decltype"] }
+tokio-postgres = "0.7"
+ratatui = "0.29"
+crossterm = "0.28"
+axum = { version = "0.7", features = ["ws", "macros"] }
+eframe = { version = "0.30", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+egui = "0.30"
+egui_extras = { version = "0.30", features = ["default"] }
+
+[dev-dependencies]
+tempfile = "3.12"

@@ -1,0 +1,84 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in Rust-SQL
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug in **Rust-SQL**!
+        Before submitting, please ensure any sensitive credentials or passwords are removed from logs or configuration snippets.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the Bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce the issue?
+      placeholder: |
+        1. Launch Rust-SQL with `--gui` / `--tui` / `--web`
+        2. Connect to server of type '...'
+        3. Execute query '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ui_mode
+    attributes:
+      label: UI / Execution Mode
+      options:
+        - Native Desktop GUI (--gui)
+        - Terminal UI (--tui / --term)
+        - Web UI & IPC Server (--web)
+        - Headless CLI Batch Mode (-e / --exec / --erd)
+        - Library API (rust_sql)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: database_adapter
+    attributes:
+      label: Database Client / Adapter
+      options:
+        - PostgreSQL (postgresql)
+        - Amazon Redshift (redshift)
+        - MySQL (mysql)
+        - MariaDB (mariadb)
+        - Microsoft SQL Server (sqlserver)
+        - SQLite (sqlite)
+        - Apache Cassandra (cassandra)
+        - Not Applicable / General UI
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: OS & Rust Version
+      description: Output of `uname -a` and `rustc --version`
+      placeholder: "Ubuntu 24.04 ARM64 / rustc 1.100.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs or Backtrace
+      description: Paste any console output or `RUST_BACKTRACE=1` output here (redact passwords!).
+      render: shell
