@@ -2,7 +2,7 @@
 
 use flate2::read::GzDecoder;
 use sha2::{Digest, Sha256};
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use tar::Archive;
@@ -88,7 +88,8 @@ pub fn extract_binary_from_zip(
         if file.is_dir() {
             continue;
         }
-        let is_target = Path::new(file.name())
+        let name = file.name().map_err(|e| e.to_string())?;
+        let is_target = Path::new(name.as_ref())
             .file_name()
             .and_then(|n| n.to_str())
             .map(|n| n.eq_ignore_ascii_case(bin_name))
@@ -107,13 +108,14 @@ pub fn extract_binary_from_zip(
 #[cfg(unix)]
 fn set_executable_permissions(path: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
-    let mut perms = fs::metadata(path).map_err(|e| e.to_string())?.permissions();
+    let mut perms = std::fs::metadata(path)
+        .map_err(|e| e.to_string())?
+        .permissions();
     perms.set_mode(0o755);
-    fs::set_permissions(path, perms).map_err(|e| e.to_string())
+    std::fs::set_permissions(path, perms).map_err(|e| e.to_string())
 }
 
 #[cfg(not(unix))]
 fn set_executable_permissions(_path: &Path) -> Result<(), String> {
-    let _ = fs::metadata;
     Ok(())
 }

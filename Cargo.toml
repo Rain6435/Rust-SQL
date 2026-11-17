@@ -1,6 +1,6 @@
 [package]
 name = "Rust-SQL"
-version = "1.41.0"
+version = "1.41.1"
 edition = "2021"
 authors = ["Mohammed Elhasnaoui <77762120+Rain6435@users.noreply.github.com>"]
 description = "A fast, lightweight, cross-database, and cross-platform SQL client written in Rust"
@@ -45,7 +45,7 @@ reqwest = { version = "0.12", features = ["json"] }
 sha2 = "0.10"
 flate2 = "1.0"
 tar = "0.4"
-zip = { version = "2.2", default-features = false, features = ["deflate"] }
+zip = { version = "9.6", default-features = false, features = ["deflate"] }
 self-replace = "1.5"
 tempfile = "3.12"
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.41.1] - 2026-11-17
+
+### Fixed
+- Upgraded `zip` to `9.6` to resolve upstream `zip 2.x` security advisories.
+- Fixed Windows `set_executable_permissions` compilation in `src/core/updater/archive.rs`.
+
 ## [1.41.0] - 2026-11-17
 
 ### Added
