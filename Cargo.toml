@@ -22,7 +22,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.40", features = ["full"] }
 async-trait = "0.1"
-thiserror = "1.0"
+thiserror = "2.0"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 aes = "0.8"
 cbc = { version = "0.1", features = ["alloc", "block-padding"] }
