@@ -1,4 +1,4 @@
-.PHONY: all build release test fmt fmt-check clippy doc run-gui run-tui run-web clean
+.PHONY: all build release test fmt fmt-check clippy doc install-hooks run-gui run-tui run-web clean
 
 all: fmt-check clippy test build
 
@@ -22,6 +22,10 @@ clippy:
 
 doc:
 	cargo doc --no-deps --open
+
+install-hooks:
+	git config core.hooksPath .githooks
+	chmod +x .githooks/pre-commit .githooks/commit-msg .githooks/pre-push
 
 run-gui:
 	cargo run -- --gui

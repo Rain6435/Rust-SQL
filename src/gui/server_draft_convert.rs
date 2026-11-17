@@ -78,18 +78,18 @@ impl ServerFormDraft {
             let sc_only = parse_lines(&self.filter_schema_only);
             let sc_ignore = parse_lines(&self.filter_schema_ignore);
             Some(ServerFilter {
-                database: (db_only.is_some() || db_ignore.is_some()).then(|| {
-                    FilterClause::List(FilterList {
+                database: (db_only.is_some() || db_ignore.is_some()).then_some(FilterClause::List(
+                    FilterList {
                         only: db_only,
                         ignore: db_ignore,
-                    })
-                }),
-                schema: (sc_only.is_some() || sc_ignore.is_some()).then(|| {
-                    FilterClause::List(FilterList {
+                    },
+                )),
+                schema: (sc_only.is_some() || sc_ignore.is_some()).then_some(FilterClause::List(
+                    FilterList {
                         only: sc_only,
                         ignore: sc_ignore,
-                    })
-                }),
+                    },
+                )),
             })
         } else {
             None

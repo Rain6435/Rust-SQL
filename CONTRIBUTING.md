@@ -75,11 +75,17 @@ This project and everyone participating in it is governed by our [Code of Conduc
    cargo run -- -e "SELECT sqlite_version();" --format markdown
    ```
 
-4. **Formatting & Linting**:
-   Before opening a Pull Request, ensure your changes pass formatting and linting checks:
+4. **Formatting, Linting & Git Hooks**:
+   Install the repository's commit and pre-push hooks so formatting, modularization (`<= 275` lines/file), Conventional Commits, Clippy, tests, and Rustdoc checks run automatically:
+   ```bash
+   make install-hooks
+   # or: git config core.hooksPath .githooks
+   ```
+   You can also run the checks manually before opening a Pull Request:
    ```bash
    cargo fmt --all -- --check
    cargo clippy --all-targets -- -D warnings
+   cargo test
    ```
 
 ---

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Rust-SQL pre-push hook: mirrors GitHub Actions CI before pushing to remote.
+# Runs rustfmt, clippy (-D warnings), full test suite, and rustdoc (-D warnings).
+
+echo "[pre-push] Running rustfmt check..."
+cargo fmt --all -- --check
+
+echo "[pre-push] Running clippy..."
+cargo clippy --all-targets -- -D warnings
+
+echo "[pre-push] Running test suite..."
+cargo test
+
+echo "[pre-push] Checking rustdoc..."
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items
+
+echo "[pre-push] All CI checks passed. Proceeding with push."

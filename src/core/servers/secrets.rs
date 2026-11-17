@@ -35,12 +35,10 @@ pub fn encrypt_secrets(
     }
 
     if let Some(ref mut ssh) = updated.ssh {
-        if let Some(ref ssh_pw) = ssh.password {
-            if let Password::Plain(ref plain) = ssh_pw {
-                if !plain.is_empty() {
-                    let enc = crypto::encrypt(plain, crypto_secret).map_err(|e| e.to_string())?;
-                    ssh.password = Some(Password::Encrypted(enc));
-                }
+        if let Some(Password::Plain(ref plain)) = ssh.password {
+            if !plain.is_empty() {
+                let enc = crypto::encrypt(plain, crypto_secret).map_err(|e| e.to_string())?;
+                ssh.password = Some(Password::Encrypted(enc));
             }
         }
     }

@@ -5,9 +5,19 @@ use crate::common::types::AdapterInfo;
 use crate::core::errors::DbCoreError;
 use std::sync::{LazyLock, Mutex, OnceLock};
 
-/// Static specification table for the 7 built-in database adapters:
+/// Static specification tuple for a built-in database adapter:
 /// `(key, name, protocol, default_port, default_database, disabled_features)`.
-pub static BUILTIN_ADAPTERS: &[(&str, &str, &str, Option<u32>, Option<&str>, &[&str])] = &[
+pub type BuiltinAdapterSpec = (
+    &'static str,
+    &'static str,
+    &'static str,
+    Option<u32>,
+    Option<&'static str>,
+    &'static [&'static str],
+);
+
+/// Static specification table for the 7 built-in database adapters.
+pub static BUILTIN_ADAPTERS: &[BuiltinAdapterSpec] = &[
     (
         "mysql",
         "MySQL",
@@ -141,7 +151,7 @@ pub fn wrap_identifier_for_adapter(adapter_key: &str, value: &str) -> String {
     }
     match adapter_key {
         "mysql" | "mariadb" => format!("`{}`", value.replace('`', "``")),
-        "sqlserver" => format!("[{}]", value.replace('[', "[")),
+        "sqlserver" => format!("[{value}]"),
         _ => {
             if value.len() >= 3 && value.ends_with(']') {
                 let bytes = value.as_bytes();

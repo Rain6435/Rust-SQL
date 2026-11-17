@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Rust-SQL pre-commit hook: fast formatting, modularization (<= 275 lines),
+# module doc header (//!), and hygiene checks before creating a commit.
+
+echo "[pre-commit] Checking rustfmt..."
+if ! cargo fmt --all -- --check; then
+    echo "error: code is not formatted. Run 'cargo fmt --all' and restage your changes." >&2
+    exit 1
+fi
+
+echo "[pre-commit] Checking staged Rust files (<= 275 lines, //! docs, no merge markers)..."
+STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^(src|tests)/.*\.rs$' || true)
+for file in $STAGED_RS; do
+    lines=$(wc -l < "$file")
+    if [ "$lines" -gt 275 ]; then
+        echo "error: $file has $lines lines (maximum allowed is 275)." >&2
+        exit 1
+    fi
+    first_nonempty=$(grep -m1 -E '[^[:space:]]' "$file" || true)
+    if [[ "$first_nonempty" != "//!"* ]]; then
+        echo "error: $file must begin with a module-level '//!' doc comment." >&2
+        exit 1
+    fi
+done
+
+STAGED_ALL=$(git diff --cached --name-only --diff-filter=ACM || true)
+for file in $STAGED_ALL; do
+    if grep -nE '^(<<<<<<<|=======|>>>>>>>)' "$file" >/dev/null 2>&1; then
+        echo "error: merge conflict markers found in $file." >&2
+        exit 1
+    fi
+    if [ "$file" != ".githooks/pre-commit" ] && grep -in 'sqlectron' "$file" >/dev/null 2>&1; then
+        echo "error: forbidden legacy terminology found in $file." >&2
+        exit 1
+    fi
+done
+
+echo "[pre-commit] All checks passed."
