@@ -36,7 +36,7 @@ log = "0.4"
 env_logger = "0.11"
 rusqlite = { version = "0.32", features = ["column_decltype"] }
 tokio-postgres = "0.7"
-ratatui = "0.29"
+ratatui = "0.30"
 crossterm = "0.28"
 axum = { version = "0.7", features = ["ws", "macros"] }
 eframe = { version = "0.30", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
