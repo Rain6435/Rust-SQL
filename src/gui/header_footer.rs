@@ -195,7 +195,8 @@ impl RustSqlGuiApp {
         });
 
         ui.horizontal(|ui| {
-            ui.heading(RichText::new("⚡ Rust-SQL").strong());
+            crate::gui::logo::render_header_logo(ui, &mut self.logo_texture);
+            ui.heading(RichText::new("Rust-SQL").strong());
             ui.separator();
 
             match self.route.clone() {

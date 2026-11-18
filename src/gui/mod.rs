@@ -2,6 +2,7 @@
 
 pub mod completion;
 pub mod header_footer;
+pub mod logo;
 pub mod modal_host_keys;
 pub mod modal_import;
 pub mod modal_server;
@@ -119,6 +120,8 @@ pub struct RustSqlGuiApp {
     pub completion: Option<crate::core::completion::Completions>,
     /// Data import modal state, while the modal is open.
     pub import_modal: Option<modal_import::ImportModalState>,
+    /// Cached GPU texture handle for the application logo.
+    pub logo_texture: Option<egui::TextureHandle>,
 }
 
 impl RustSqlGuiApp {
@@ -167,6 +170,7 @@ impl RustSqlGuiApp {
             update_apply_message: None,
             import_modal: None,
             completion: None,
+            logo_texture: None,
         }
     }
 
@@ -226,11 +230,16 @@ pub fn run_native_gui() -> Result<(), String> {
             .map_err(|e| e.to_string())?,
     );
 
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title("Rust-SQL")
+        .with_inner_size([1200.0, 800.0])
+        .with_min_inner_size([800.0, 550.0]);
+    if let Some(icon) = logo::load_app_icon() {
+        viewport = viewport.with_icon(Arc::new(icon));
+    }
+
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("Rust-SQL")
-            .with_inner_size([1200.0, 800.0])
-            .with_min_inner_size([800.0, 550.0]),
+        viewport,
         ..Default::default()
     };
 
