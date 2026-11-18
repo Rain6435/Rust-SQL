@@ -19,7 +19,10 @@ use std::collections::HashMap;
 
 /// Connects `db_conn`. An unknown or expiring SSH bastion key is trusted only when it matches
 /// the fingerprint the user passed with `--trust-host-key`; a changed key always fails.
-async fn connect_db(db_conn: &mut DatabaseConnection, trust: Option<&str>) -> Result<(), String> {
+pub(crate) async fn connect_db(
+    db_conn: &mut DatabaseConnection,
+    trust: Option<&str>,
+) -> Result<(), String> {
     let err = match db_conn.connect().await {
         Ok(()) => return Ok(()),
         Err(e) => e,

@@ -151,6 +151,13 @@ impl RustSqlGuiApp {
                     }
                 }
             }
+            if ui
+                .button("📥 Import")
+                .on_hover_text("Import CSV or JSON rows into a table")
+                .clicked()
+            {
+                self.import_modal = Some(Default::default());
+            }
             if ui.button("📂 Open").clicked() {
                 self.show_open_query_modal = true;
             }

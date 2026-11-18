@@ -2,6 +2,7 @@
 
 pub mod header_footer;
 pub mod modal_host_keys;
+pub mod modal_import;
 pub mod modal_server;
 pub mod modal_settings;
 pub mod modals_files;
@@ -113,6 +114,8 @@ pub struct RustSqlGuiApp {
     pub update_modal_state: Option<Result<UpdateCheckResult, String>>,
     /// Message displayed after an in-app self-update attempt.
     pub update_apply_message: Option<Result<String, String>>,
+    /// Data import modal state, while the modal is open.
+    pub import_modal: Option<modal_import::ImportModalState>,
 }
 
 impl RustSqlGuiApp {
@@ -159,6 +162,7 @@ impl RustSqlGuiApp {
             erd_modal_diagram: None,
             update_modal_state: None,
             update_apply_message: None,
+            import_modal: None,
         }
     }
 
@@ -172,6 +176,7 @@ impl RustSqlGuiApp {
         self.render_host_keys_manager(ctx);
         self.render_file_and_safety_modals(ctx);
         self.render_bookmarks_stats_erd_modals(ctx);
+        self.render_import_modal(ctx);
     }
 }
 
