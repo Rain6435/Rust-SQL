@@ -188,6 +188,103 @@ jobs:
       - name: Run live PostgreSQL suite
         run: cargo test --test live_postgres_suite --test live_postgres_params_suite --test read_only_suite -- --nocapture
 
+  live-databases:
+    name: Live Databases (PostgreSQL, MySQL, MariaDB)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: rust_sql
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: rust_sql
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -ppassword"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: password
+          MARIADB_DATABASE: rust_sql
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      RUST_SQL_TEST_PG_HOST: 127.0.0.1
+      RUST_SQL_TEST_PG_PORT: 5432
+      RUST_SQL_TEST_PG_USER: postgres
+      RUST_SQL_TEST_PG_PASSWORD: password
+      RUST_SQL_TEST_PG_DB: rust_sql
+      RUST_SQL_TEST_MYSQL_HOST: 127.0.0.1
+      RUST_SQL_TEST_MYSQL_PORT: 3306
+      RUST_SQL_TEST_MYSQL_USER: root
+      RUST_SQL_TEST_MYSQL_PASSWORD: password
+      RUST_SQL_TEST_MYSQL_DB: rust_sql
+      RUST_SQL_TEST_MARIADB_HOST: 127.0.0.1
+      RUST_SQL_TEST_MARIADB_PORT: 3307
+      RUST_SQL_TEST_MARIADB_USER: root
+      RUST_SQL_TEST_MARIADB_PASSWORD: password
+      RUST_SQL_TEST_MARIADB_DB: rust_sql
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libssl-dev \
+            libsqlite3-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libgtk-3-dev \
+            libgl1-mesa-dev \
+            libegl1-mesa-dev \
+            libfontconfig1-dev \
+            libfreetype-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      # Fails if any server returns emulated results when a live connection was requested.
+      # MySQL and MariaDB have no live driver yet, so for them the suite asserts the
+      # "not implemented" refusal; it runs the full shared checks once a driver exists.
+      - name: Run the shared suite against every live server
+        run: >-
+          cargo test
+          --test live_dialects_suite
+          --test statement_timeout_suite
+          --test import_suite
+          --test result_paging_suite
+          -- --nocapture
+
   docs:
     name: Rustdoc Check
     runs-on: ubuntu-latest

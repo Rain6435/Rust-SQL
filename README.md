@@ -104,19 +104,29 @@ and must be entered again.
    - **Values are sent through the driver's prepared statements, never pasted into the SQL.** SQLite (and the emulator) binds them with `rusqlite`; PostgreSQL and Redshift prepare the statement with `$1`, `$2`, ... and bind typed values. Every adapter must implement `query_with_params` / `execute_query_with_params`.
    - **Types are kept.** Each parameter is Text, Number, Boolean, or NULL: a type picker in the desktop GUI, <kbd>Tab</kbd> into the parameter list and <kbd>Ctrl</kbd>-<kbd>T</kbd> in the terminal UI, and a JSON object (`{"id": 5, "name": "x"}`) in the web UI. Text is never re-read as a number.
    - A placeholder with no value is an error that names it. On PostgreSQL, a parameterized query returns typed values (numbers, booleans, JSON; `numeric`, dates, and times as text); a result column of another type, such as `inet`, is an error asking you to cast it to text.
-   - History stores the query with its placeholders, so Replay binds the values again. The history panel also shows a copy with the values filled in, labeled `-- display only, not executed` (`bind_for_display`); it is never run.
+   - History stores the query with its placeholders, so Replay binds the values again. Parameter values are **not** kept in history unless you turn on "Keep parameter values in history" (`historyStoreBoundValues`); then the history panel also shows a copy with the values filled in, labeled `-- display only, not executed` (`bind_for_display`), which is never run.
 3. **Saved SQL Bookmarks & Searchable Execution History ([src/core/bookmarks.rs](src/core/bookmarks.rs))**:
    - Save, tag, search, and insert reusable SQL snippets (`SqlBookmark`).
    - Full execution history audit trail (`QueryHistoryEntry`) recording database, SQL, duration (`ms`), row count, and status with one-click replay.
+   - **History privacy ([src/core/history.rs](src/core/history.rs))**: history keeps the query with its placeholders, never the parameter values, by default. Mark a connection "Exclude from query history" (`excludeFromHistory`) and nothing run on it is recorded. Values typed directly into the SQL text are part of the query and are kept; use parameters for sensitive values. History lives in memory only; the web server stores no query text (its audit log records statement type and row count).
 4. **Interactive Result Filtering, Sorting & Column Profiler ([src/core/result_ops.rs](src/core/result_ops.rs))**:
    - Client-side instant row filtering (`filter_result_rows`) and clickable column sorting (`sort_result_rows` ascending/descending).
-   - **Column Summary Statistics (`📊 Stats` / `compute_column_stats`)**: Computes total rows, null count, distinct count, min, max, sum, and mean for every column in a result set.
+   - **Column Summary Statistics (`📊 Stats` / `compute_column_stats`)**: Computes total rows, null count, distinct count, min, max, sum, and mean for every column over the rows loaded so far, and says so when more pages exist.
+   - **Result paging ([src/core/paging.rs](src/core/paging.rs))**: a query that is a single read-only `SELECT` is fetched one page at a time (`resultPageSize`, default 1000 rows). "Load more" (GUI and web) or <kbd>m</kbd> (terminal UI) fetches the next page. Pages use `LIMIT`/`OFFSET` around your query, so add an `ORDER BY` for a stable order; rows changed between pages can shift later pages. Other scripts run unpaged.
+   - **Statement timeouts**: each saved connection can set "Statement timeout (s)" (`statementTimeoutSecs`). PostgreSQL and Redshift set `statement_timeout` on the session; SQLite interrupts a statement that runs past it and bounds lock waits with `busy_timeout`. A statement past the limit fails with "Statement timed out". The timeout is shown in the GUI footer, the terminal UI query box, and the web footer. The emulator ignores it.
 5. **Automated Schema ER Diagram Generator ([src/core/result_ops.rs](src/core/result_ops.rs))**:
    - Generates a Mermaid `erDiagram` (`generate_mermaid_erd`) from database tables, columns, primary keys (`PK`), and foreign key references (`FK`), available both in the GUI (`🗺 Schema ERD`) and CLI (`--erd`).
 6. **Multi-Format Data Export ([src/core/export.rs](src/core/export.rs))**:
    - Export query results to **CSV**, **JSON**, **JSON Lines (`JSONL` / `NDJSON`)**, **GitHub-Flavored Markdown Tables (`MARKDOWN`)**, and **SQL `INSERT INTO` Statements (`SQL`)** (to file or clipboard).
 7. **Headless CLI Batch Execution ([src/main.rs](src/main.rs))**:
    - Run queries directly from CI/CD scripts or the terminal via `-e / --exec "<SQL>"`, `--uri <CONN_URI>`, `--server <NAME_OR_ID>`, `--format <json|jsonl|csv|markdown|sql>`, `--read-only`, `--erd`, and `--emulate` (see [Emulation](#emulation-opt-in-only)).
+8. **CSV & JSON Import ([src/core/import/](src/core/import/mod.rs))**:
+   - Import `.csv`/`.tsv` (header row; an empty field is `NULL`) or `.json` (an array of objects) / `.jsonl` (one object per line; JSON types kept) into an existing table.
+   - The desktop GUI (`📥 Import`) previews the first rows and lets you pick a target column for each source column (matched by name to start with). The CLI maps by name and lists skipped columns: `--import <FILE> --table <TABLE> [--schema S] [--yes]`.
+   - Every row goes through a prepared statement, all in one transaction: if any row fails, nothing is imported and the error names the row. Imports of 10,000 rows or more need explicit confirmation (a checkbox in the GUI, `--yes` in the CLI). Import is disabled in Read-Only mode and not available for Cassandra. The terminal and web UIs have no import yet.
+9. **Autocomplete ([src/core/completion.rs](src/core/completion.rs))**:
+   - The desktop GUI editor suggests table names after `FROM`/`JOIN`/`INTO`/`UPDATE`, the columns of a table after `alias.` or `table.`, and otherwise columns of the tables in the query, table names, and keywords. Columns are loaded from the server on demand and cached.
+   - Suggestions appear as you type when "Live Auto Complete" is on, or on <kbd>Ctrl</kbd>-<kbd>Space</kbd>. <kbd>Tab</kbd> or a click inserts one; <kbd>Esc</kbd> hides them. Turning "Auto Complete" off disables both. The terminal and web UIs do not autocomplete yet.
 
 ---
 
@@ -146,6 +156,9 @@ cargo run -- --web --insecure-http --port 8080
 
 # Execute a headless batch query and format as Markdown
 cargo run -- --uri "postgres://localhost:5432/rust_sql" -e "SELECT * FROM users" --format markdown
+
+# Import a CSV file into an existing table (one transaction; --yes for 10,000+ rows)
+cargo run -- --uri "postgres://localhost:5432/rust_sql" --import people.csv --table people
 
 # Generate a Mermaid ER Diagram from the CLI
 cargo run -- --uri "postgres://localhost:5432/rust_sql" --erd

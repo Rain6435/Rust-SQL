@@ -145,18 +145,19 @@ fn cli_import_needs_yes_for_large_files_and_imports_by_column_name() {
         .unwrap();
     let small = dir.path().join("p.csv");
     std::fs::write(&small, "ID,name,unused\n1,Ann,x\n2,\"Bo, Jr\",y\n").unwrap();
-    let uri = format!("sqlite://{}", db.display());
+    // A relative sqlite: URI keeps the test portable (no drive letter in the URI on Windows).
     let run = |file: &std::path::Path, extra: &[&str]| {
         std::process::Command::new(env!("CARGO_BIN_EXE_Rust-SQL"))
             .args([
                 "--uri",
-                &uri,
+                "sqlite:cli.db",
                 "--import",
                 file.to_str().unwrap(),
                 "--table",
                 "people",
             ])
             .args(extra)
+            .current_dir(dir.path())
             .env("HOME", dir.path())
             .output()
             .unwrap()

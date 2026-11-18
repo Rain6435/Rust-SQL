@@ -23,6 +23,24 @@ RUST_SQL_TEST_PG_USER=postgres RUST_SQL_TEST_PG_PASSWORD=password RUST_SQL_TEST_
 ```
 
 
+### Running the shared suite against every live server
+
+`tests/live_dialects_suite.rs` runs against each server whose `RUST_SQL_TEST_<DIALECT>_HOST` is set
+(`PG`, `MYSQL`, `MARIADB`; also `_PORT`, `_USER`, `_PASSWORD`, `_DB`). It fails if any of them
+returns emulated results when a live connection was requested. PostgreSQL runs the shared checks
+(prepared parameters, paging, import); MySQL and MariaDB must refuse with "not implemented" until
+their drivers land, after which the same checks run against them. CI runs it in the
+"Live Databases" job together with the timeout, import, and paging suites.
+
+```bash
+docker compose up -d postgres mysql mariadb
+RUST_SQL_TEST_PG_HOST=127.0.0.1 \
+RUST_SQL_TEST_MYSQL_HOST=127.0.0.1 RUST_SQL_TEST_MYSQL_PORT=3306 \
+RUST_SQL_TEST_MARIADB_HOST=127.0.0.1 RUST_SQL_TEST_MARIADB_PORT=3307 \
+  cargo test --test live_dialects_suite --test statement_timeout_suite \
+             --test import_suite --test result_paging_suite
+```
+
 ### Running the SSH tunnel tests
 
 Unit tests in `src/core/tunnel/` run an in-process SSH server and need nothing extra. The
