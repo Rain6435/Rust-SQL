@@ -86,16 +86,39 @@ impl RustSqlGuiApp {
             .any(|f| f == "cancelQuery");
 
         let mut sql_text = query_tab.query.clone();
-        ui.add_sized(
-            [ui.available_width(), 160.0],
-            egui::TextEdit::multiline(&mut sql_text)
-                .code_editor()
-                .font(FontId::monospace(self.editor_font_size))
-                .desired_rows(8)
-                .hint_text("Write your SQL query here..."),
-        );
-        if sql_text != query_tab.query {
+        let editor_id = egui::Id::unique(("sql_editor", qid));
+        let focused = ui.memory(|m| m.has_focus(editor_id));
+        let has_items = self
+            .completion
+            .as_ref()
+            .is_some_and(|c| !c.items.is_empty());
+        let accept = has_items
+            && focused
+            && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Tab));
+        let explicit =
+            focused && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, Key::Space));
+        if has_items && ui.input(|i| i.key_pressed(Key::Escape)) {
+            self.completion = None;
+        }
+        let output = egui::TextEdit::multiline(&mut sql_text)
+            .id(editor_id)
+            .code_editor()
+            .font(FontId::monospace(self.editor_font_size))
+            .desired_rows(8)
+            .desired_width(f32::INFINITY)
+            .hint_text("Write your SQL query here... (Ctrl+Space: suggestions, Tab: accept)")
+            .show(ui);
+        let cursor = output.cursor_range.map(|r| r.primary.index.0);
+        let changed = sql_text != query_tab.query;
+        if changed {
             self.store.update_query_if_needed(&sql_text, None, None);
+        }
+        if let (Some(cursor), true) = (cursor, changed || explicit) {
+            self.refresh_completions(&query_tab.database, &sql_text, cursor, explicit);
+        }
+        let picked = self.render_completion_strip(ui, accept);
+        if let Some(label) = picked {
+            self.apply_completion(ui.ctx(), editor_id, &sql_text, &label);
         }
 
         let detected_params = extract_query_parameters(&query_tab.query);
@@ -150,6 +173,13 @@ impl RustSqlGuiApp {
                         self.erd_modal_diagram = Some(erd);
                     }
                 }
+            }
+            if ui
+                .button("📥 Import")
+                .on_hover_text("Import CSV or JSON rows into a table")
+                .clicked()
+            {
+                self.import_modal = Some(Default::default());
             }
             if ui.button("📂 Open").clicked() {
                 self.show_open_query_modal = true;

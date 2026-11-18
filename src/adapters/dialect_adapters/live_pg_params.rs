@@ -5,7 +5,7 @@
 //! binary values when the parameter has that type, and everything else is sent in PostgreSQL's
 //! text input format so the server parses it as the inferred type. Values never enter the SQL.
 
-use crate::adapters::dialect_adapters::live_pg::describe_pg_error;
+use crate::adapters::dialect_adapters::live_pg::pg_query_error;
 use crate::adapters::dialect_adapters::live_pg_decode::decode_rows;
 use crate::adapters::dialect_adapters::live_pg_query::{execute_live_query, finish_statement};
 use crate::common::types::QueryRowResult;
@@ -115,7 +115,7 @@ pub async fn execute_live_query_with_params(
     let mut results = Vec::with_capacity(statements.len());
     for stmt in statements {
         let prepared = prepare_statement(&stmt.text, params, PlaceholderStyle::Dollar)?;
-        let pg_err = |e: tokio_postgres::Error| DbCoreError::Message(describe_pg_error(&e));
+        let pg_err = |e: tokio_postgres::Error| pg_query_error(&e);
         let statement = client.prepare(&prepared.sql).await.map_err(pg_err)?;
         let args = prepared
             .values

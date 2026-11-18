@@ -31,6 +31,7 @@ impl AppStore {
             is_canceling: false,
             result_items_per_page: self.queries.result_items_per_page,
             execution_time: None,
+            page: None,
         };
         self.queries.last_created_id = new_id;
         self.queries.current_query_id = Some(new_id);
@@ -188,8 +189,9 @@ impl AppStore {
             .as_ref()
             .map(|s| s.client.clone())
             .unwrap_or_default();
-        let display_sql =
-            (!params.is_empty()).then(|| bind_for_display(query_text, &params, &client));
+        let policy = self.history_policy();
+        let display_sql = (!params.is_empty() && policy.store_bound_values)
+            .then(|| bind_for_display(query_text, &params, &client));
 
         let start = Instant::now();
         if let Some(q) = self.queries.queries_by_id.get_mut(&query_id) {
@@ -198,24 +200,15 @@ impl AppStore {
             q.is_default_select = is_default_select;
             q.did_invalidate = false;
             q.execution_time = None;
-            q.query_history.push(query_text.to_string());
+            if !policy.excluded {
+                q.query_history.push(query_text.to_string());
+            }
         }
         self.status = "Executing query...".to_string();
 
-        let can_cancel = !self
-            .connections
-            .disabled_features
-            .iter()
-            .any(|f| f == "cancelQuery");
-        let exec_res = if can_cancel {
-            self.db
-                .create_cancellable_query_with_params(&db_name, query_id, query_text, &params)?;
-            self.db.execute_cancellable_query(query_id).await
-        } else {
-            self.db
-                .execute_query_with_params(&db_name, query_text, &params)
-                .await
-        };
+        let (exec_res, page) = self
+            .run_tab_query(&db_name, query_id, query_text, &params)
+            .await;
 
         let elapsed_ms = start.elapsed().as_millis() as u64;
         self.status.clear();
@@ -223,14 +216,20 @@ impl AppStore {
         match exec_res {
             Ok(results) => {
                 let total_rows: usize = results.iter().map(|r| r.rows.len()).sum();
-                self.bookmark_manager
-                    .record_history(&db_name, query_text, elapsed_ms, total_rows, None);
-                self.bookmark_manager.set_latest_display_sql(display_sql);
+                self.record_execution(
+                    policy,
+                    &db_name,
+                    query_text,
+                    display_sql,
+                    elapsed_ms,
+                    Ok(total_rows),
+                );
                 if let Some(q) = self.queries.queries_by_id.get_mut(&query_id) {
                     q.error = None;
                     q.is_executing = false;
                     q.results = Some(results.clone());
                     q.execution_time = Some(elapsed_ms);
+                    q.page = page;
                 }
                 for r in &results {
                     match r.command.as_str() {
@@ -243,18 +242,19 @@ impl AppStore {
                 Ok(results)
             }
             Err(err) => {
-                self.bookmark_manager.record_history(
+                self.record_execution(
+                    policy,
                     &db_name,
                     query_text,
+                    display_sql,
                     elapsed_ms,
-                    0,
-                    Some(err.clone()),
+                    Err(err.clone()),
                 );
-                self.bookmark_manager.set_latest_display_sql(display_sql);
                 if let Some(q) = self.queries.queries_by_id.get_mut(&query_id) {
                     q.results = None;
                     q.is_executing = false;
                     q.error = Some(err.clone());
+                    q.page = None;
                 }
                 Err(err)
             }

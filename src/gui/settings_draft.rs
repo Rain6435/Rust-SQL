@@ -34,6 +34,10 @@ pub struct SettingsFormDraft {
     pub log_path: String,
     /// Active log level (`"debug"`, `"info"`, `"warn"`, `"error"`).
     pub log_level: String,
+    /// Whether history also keeps parameter values (display only).
+    pub history_store_bound_values: bool,
+    /// Rows fetched per result page.
+    pub result_page_size: String,
 }
 
 impl SettingsFormDraft {
@@ -56,6 +60,8 @@ impl SettingsFormDraft {
             log_file: cfg.log.file,
             log_path: cfg.log.path,
             log_level: cfg.log.level,
+            history_store_bound_values: cfg.history_store_bound_values,
+            result_page_size: cfg.result_page_size.to_string(),
         }
     }
 
@@ -92,6 +98,13 @@ impl SettingsFormDraft {
                 level: self.log_level.clone(),
             }),
             emulate_unsupported_dialects: None,
+            history_store_bound_values: Some(self.history_store_bound_values),
+            result_page_size: self
+                .result_page_size
+                .trim()
+                .parse::<u32>()
+                .ok()
+                .filter(|n| *n > 0),
         }
     }
 }

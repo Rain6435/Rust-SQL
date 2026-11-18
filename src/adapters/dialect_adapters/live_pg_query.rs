@@ -1,6 +1,6 @@
 //! Live PostgreSQL / Redshift query execution and cancellation via `tokio-postgres`.
 
-use crate::adapters::dialect_adapters::live_pg::describe_pg_error;
+use crate::adapters::dialect_adapters::live_pg::pg_query_error;
 use crate::adapters::dialect_adapters::live_pg_params::execute_live_query_with_params;
 use crate::adapters::CancellableQuery;
 use crate::common::types::{FieldInfo, QueryRowResult};
@@ -57,7 +57,7 @@ pub async fn execute_live_query(
     let messages = client
         .simple_query(query_text)
         .await
-        .map_err(|e| DbCoreError::Message(describe_pg_error(&e)))?;
+        .map_err(|e| pg_query_error(&e))?;
 
     let mut results = Vec::new();
     let mut fields: Vec<FieldInfo> = Vec::new();

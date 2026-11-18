@@ -32,7 +32,8 @@ impl RustSqlGuiApp {
         }
         if query_tab.is_executing {
             ui.centered_and_justified(|ui| {
-                ui.label(RichText::new("⏳ Executing query...").size(16.0));
+                let timeout = self.store.statement_timeout_label().unwrap_or_default();
+                ui.label(RichText::new(format!("⏳ Executing query... {timeout}")).size(16.0));
             });
             return;
         }
@@ -107,6 +108,19 @@ impl RustSqlGuiApp {
                 let row_count = res.row_count.unwrap_or(res.rows.len());
                 ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(format!("Rows: {row_count}")).strong());
+                    if let Some(page) = query_tab.page.as_ref().filter(|_| idx == 0) {
+                        ui.label(format!("(page size {})", page.page_size));
+                        if page.next.is_some() {
+                            if ui.small_button("⬇ Load more").clicked() {
+                                let rt = self.rt.clone();
+                                if let Err(e) = rt.block_on(self.store.fetch_more_rows()) {
+                                    self.store.status = e;
+                                }
+                            }
+                        } else {
+                            ui.label(RichText::new("all rows loaded").weak());
+                        }
+                    }
                     ui.separator();
                     ui.label(format!("{:.3}s", secs));
                     if row_count > 0 {

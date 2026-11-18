@@ -1,6 +1,7 @@
 //! SQLite statement execution, row/value conversion, and `sqlite3_interrupt` cancellable query support.
 
 use crate::adapters::sqlite::connection::open_sqlite;
+use crate::adapters::sqlite::timeout::{apply_busy_timeout, run_with_timeout};
 use crate::adapters::CancellableQuery;
 use crate::common::types::{FieldInfo, QueryRowResult};
 use crate::core::errors::{CanceledByUserError, DbCoreError};
@@ -12,6 +13,7 @@ use rusqlite::{params_from_iter, Connection, InterruptHandle, ToSql};
 use serde_json::{Map, Number, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 impl ToSql for ParamValue {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
@@ -162,6 +164,8 @@ pub struct SqliteCancellableQuery {
     pub interrupt_handle: Mutex<Option<InterruptHandle>>,
     /// Atomic flag tracking whether [`cancel`](CancellableQuery::cancel) has been invoked.
     pub canceled: AtomicBool,
+    /// Per-statement timeout; each statement is interrupted once it passes.
+    pub statement_timeout: Option<Duration>,
 }
 
 #[async_trait]
@@ -177,10 +181,9 @@ impl CancellableQuery for SqliteCancellableQuery {
             .lock()
             .map_err(|e| DbCoreError::Message(e.to_string()))?;
         if guard.is_none() {
-            *guard = Some(open_sqlite(
-                &self.db_path,
-                self.read_only.load(Ordering::SeqCst),
-            )?);
+            let conn = open_sqlite(&self.db_path, self.read_only.load(Ordering::SeqCst))?;
+            apply_busy_timeout(&conn, self.statement_timeout)?;
+            *guard = Some(conn);
         }
         let Some(conn) = guard.as_ref() else {
             return Err(DbCoreError::NoConnectionAvailable);
@@ -198,13 +201,15 @@ impl CancellableQuery for SqliteCancellableQuery {
             if self.canceled.load(Ordering::SeqCst) {
                 return Err(DbCoreError::CanceledByUser(CanceledByUserError::new()));
             }
-            results.push(execute_sqlite_statement_with_params(
-                conn,
-                &stmt.text,
-                stmt.statement_type,
-                stmt.execution_type,
-                &self.params,
-            )?);
+            results.push(run_with_timeout(conn, self.statement_timeout, |c| {
+                execute_sqlite_statement_with_params(
+                    c,
+                    &stmt.text,
+                    stmt.statement_type,
+                    stmt.execution_type,
+                    &self.params,
+                )
+            })?);
         }
         Ok(results)
     }

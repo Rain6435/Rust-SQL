@@ -61,6 +61,18 @@ impl RustSqlGuiApp {
                         "Live Auto Complete",
                     );
                 });
+                ui.horizontal(|ui| {
+                    ui.checkbox(
+                        &mut self.settings_draft.history_store_bound_values,
+                        "Keep parameter values in history",
+                    )
+                    .on_hover_text("Off: history keeps only the query with its placeholders");
+                    ui.label("Result page size:");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.settings_draft.result_page_size)
+                            .desired_width(60.0),
+                    );
+                });
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.label("Custom CSV Delimiter:");

@@ -2,6 +2,7 @@
 
 pub mod connection;
 pub mod executor;
+pub mod timeout;
 
 pub use connection::open_sqlite;
 pub use executor::{
@@ -19,11 +20,11 @@ use crate::common::types::{
 use crate::common::utils::append_semi_colon;
 use crate::core::errors::DbCoreError;
 use crate::core::params::QueryParams;
-use crate::core::sql_identifier::identify;
 use async_trait::async_trait;
 use rusqlite::Connection;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 /// SQLite database adapter supporting both file-backed databases and persistent `:memory:` sessions.
 pub struct SqliteAdapter {
@@ -35,6 +36,8 @@ pub struct SqliteAdapter {
     pub shared_conn: Arc<Mutex<Option<Connection>>>,
     /// Whether the session is read-only (see [`connection`]).
     pub read_only: Arc<AtomicBool>,
+    /// Per-statement timeout from the connection profile (see [`timeout`]).
+    pub statement_timeout: Option<Duration>,
 }
 
 impl SqliteAdapter {
@@ -50,6 +53,7 @@ impl SqliteAdapter {
             version: AdapterVersion::default(),
             shared_conn: Arc::new(Mutex::new(None)),
             read_only: Arc::new(AtomicBool::new(false)),
+            statement_timeout: server.statement_timeout(),
         }
     }
 }
@@ -205,6 +209,7 @@ impl DatabaseAdapter for SqliteAdapter {
             params: params.clone(),
             interrupt_handle: Mutex::new(None),
             canceled: AtomicBool::new(false),
+            statement_timeout: self.statement_timeout,
         }))
     }
 
@@ -213,24 +218,7 @@ impl DatabaseAdapter for SqliteAdapter {
         query_text: &str,
         params: &QueryParams,
     ) -> Result<Vec<QueryRowResult>, DbCoreError> {
-        let statements = identify(query_text, false).unwrap_or_default();
-        if statements.is_empty() {
-            return Ok(Vec::new());
-        }
-        self.open_or_with_conn(|conn| {
-            statements
-                .into_iter()
-                .map(|s| {
-                    execute_sqlite_statement_with_params(
-                        conn,
-                        &s.text,
-                        s.statement_type,
-                        s.execution_type,
-                        params,
-                    )
-                })
-                .collect()
-        })
+        self.run_script(query_text, params)
     }
 
     async fn get_query_select_top(

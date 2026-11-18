@@ -10,6 +10,7 @@ pub mod auth;
 pub mod ipc_admin;
 pub mod ipc_config_servers;
 pub mod ipc_db_metadata;
+pub mod ipc_db_paging;
 pub mod ipc_db_queries;
 pub mod ipc_policy;
 pub mod ipc_ssh_host_keys;
@@ -138,6 +139,9 @@ pub async fn dispatch_ipc_event(ctx: &IpcCtx<'_>, req: IpcRequest) -> IpcRespons
     }
     if let Some(resp) = ipc_db_queries::handle_db_queries_ipc(ctx, event, args).await {
         return resp;
+    }
+    if event == crate::common::event::DB_EXECUTE_PAGED {
+        return ipc_db_paging::execute_paged(ctx, args).await;
     }
     if let Some(resp) = ipc_ssh_host_keys::handle_ssh_host_keys_ipc(ctx, event, args).await {
         return resp;

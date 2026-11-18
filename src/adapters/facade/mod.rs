@@ -5,6 +5,8 @@ pub mod connection;
 pub mod connection_scripts;
 pub mod db_facade;
 pub mod db_facade_queries;
+pub mod import;
+pub mod paging;
 
 pub use connection::DatabaseConnection;
 pub use db_facade::DatabaseFacade;

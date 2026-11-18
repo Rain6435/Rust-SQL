@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **CSV and JSON import.** Import `.csv`/`.tsv`/`.json`/`.jsonl` rows into an existing table from
+  the desktop GUI (`📥 Import`: preview, per-column mapping) or the CLI
+  (`--import <FILE> --table <TABLE> [--schema S] [--yes]`). Rows go through prepared statements in
+  one transaction; a failing row rolls back everything. 10,000+ rows need explicit confirmation.
+- **Per-connection statement timeout** (`statementTimeoutSecs`, "Statement timeout (s)" in the
+  connection form). PostgreSQL/Redshift set `statement_timeout`; SQLite interrupts the statement
+  and sets `busy_timeout`. Shown in the GUI footer, terminal UI, and web footer.
+- **Result paging.** A single `SELECT` loads `resultPageSize` rows (default 1000) at a time, with
+  "Load more" in the GUI and web UI and <kbd>m</kbd> in the terminal UI. Web: `DB_EXECUTE_PAGED`.
+  Column statistics say when they cover only the rows loaded so far.
+- **Autocomplete in the desktop GUI editor**: tables, columns of referenced tables (aliases
+  resolved), and keywords, live or on <kbd>Ctrl</kbd>-<kbd>Space</kbd>. The existing Auto Complete
+  settings now do something; before, no completion engine existed.
+- **Live database CI job** that starts PostgreSQL, MySQL, and MariaDB and fails if any returns
+  emulated results when a live connection was requested.
+
 ### Changed
+- **Query history no longer keeps parameter values by default.** It keeps the query with its
+  placeholders; turn on "Keep parameter values in history" (`historyStoreBoundValues`) to also keep
+  the display-only copy. A connection marked "Exclude from query history" records nothing.
 - **Query parameters are bound through prepared statements instead of pasted into the SQL.**
   - SQLite, the emulator, PostgreSQL, and Redshift bind `:name`, `@name`, and `$1` values through
     the driver. A value containing `'`, `\`, or `--` can no longer change the statement.

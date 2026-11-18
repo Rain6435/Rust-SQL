@@ -4,8 +4,13 @@
 //! rejects writes. An in-memory database cannot be reopened without losing its contents, so it
 //! uses `PRAGMA query_only = ON` instead.
 
+use crate::adapters::sqlite::execute_sqlite_statement_with_params;
+use crate::adapters::sqlite::timeout::{apply_busy_timeout, run_with_timeout};
 use crate::adapters::sqlite::{map_sqlite_err, SqliteAdapter};
+use crate::common::types::QueryRowResult;
 use crate::core::errors::DbCoreError;
+use crate::core::params::QueryParams;
+use crate::core::sql_identifier::identify;
 use rusqlite::{Connection, OpenFlags};
 use std::sync::atomic::Ordering;
 
@@ -43,15 +48,43 @@ impl SqliteAdapter {
             .lock()
             .map_err(|e| DbCoreError::Message(e.to_string()))?;
         if guard.is_none() {
-            *guard = Some(open_sqlite(
-                &self.db_path,
-                self.read_only.load(Ordering::SeqCst),
-            )?);
+            let conn = open_sqlite(&self.db_path, self.read_only.load(Ordering::SeqCst))?;
+            apply_busy_timeout(&conn, self.statement_timeout)?;
+            *guard = Some(conn);
         }
         match guard.as_ref() {
             Some(conn) => f(conn),
             None => Err(DbCoreError::NoConnectionAvailable),
         }
+    }
+
+    /// Runs every statement of `query_text` with `params`, each under the statement timeout.
+    pub(crate) fn run_script(
+        &self,
+        query_text: &str,
+        params: &QueryParams,
+    ) -> Result<Vec<QueryRowResult>, DbCoreError> {
+        let statements = identify(query_text, false).unwrap_or_default();
+        if statements.is_empty() {
+            return Ok(Vec::new());
+        }
+        let limit = self.statement_timeout;
+        self.open_or_with_conn(|conn| {
+            statements
+                .into_iter()
+                .map(|s| {
+                    run_with_timeout(conn, limit, |c| {
+                        execute_sqlite_statement_with_params(
+                            c,
+                            &s.text,
+                            s.statement_type,
+                            s.execution_type,
+                            params,
+                        )
+                    })
+                })
+                .collect()
+        })
     }
 
     /// Runs `sql` and collects column `col_idx` of every row as text.
@@ -82,7 +115,9 @@ impl SqliteAdapter {
             Some(conn) if self.db_path == ":memory:" => set_query_only(conn, read_only),
             Some(_) => {
                 *guard = None;
-                *guard = Some(open_sqlite(&self.db_path, read_only)?);
+                let conn = open_sqlite(&self.db_path, read_only)?;
+                apply_busy_timeout(&conn, self.statement_timeout)?;
+                *guard = Some(conn);
                 Ok(())
             }
             None => Ok(()),

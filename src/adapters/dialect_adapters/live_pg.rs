@@ -51,6 +51,28 @@ pub(crate) fn describe_pg_error(e: &tokio_postgres::Error) -> String {
     out
 }
 
+/// Maps a query error, reporting PostgreSQL's `statement_timeout` cancel as a timeout.
+pub(crate) fn pg_query_error(e: &tokio_postgres::Error) -> DbCoreError {
+    if let Some(db) = e.as_db_error() {
+        if db.code() == &tokio_postgres::error::SqlState::QUERY_CANCELED
+            && db.message().contains("statement timeout")
+        {
+            return DbCoreError::StatementTimeout(format!(
+                "{} (SQLSTATE {}). The connection's statement timeout stopped it.",
+                db.message(),
+                db.code().code()
+            ));
+        }
+    }
+    DbCoreError::Message(describe_pg_error(e))
+}
+
+/// `SET` command for the session's `statement_timeout` (`0` turns it off).
+pub fn pg_statement_timeout_command(timeout: Option<Duration>) -> String {
+    let ms = timeout.map(|t| t.as_millis()).unwrap_or(0);
+    format!("SET statement_timeout = {ms}")
+}
+
 /// Opens a live connection for `adapter_key` (`postgresql` or `redshift`).
 pub async fn connect_live_postgres(
     adapter_key: &str,
@@ -112,6 +134,17 @@ pub async fn connect_live_postgres(
             log::warn!("PostgreSQL connection closed: {e}");
         }
     });
+    if let Some(timeout) = server.statement_timeout() {
+        client
+            .batch_execute(&pg_statement_timeout_command(Some(timeout)))
+            .await
+            .map_err(|e| {
+                fail(&format!(
+                    "could not set statement_timeout: {}",
+                    describe_pg_error(&e)
+                ))
+            })?;
+    }
 
     let schema = client
         .query_one(pg_sql::GET_SCHEMA, &[])
@@ -183,6 +216,18 @@ impl DialectAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn statement_timeout_command_uses_milliseconds() {
+        assert_eq!(
+            pg_statement_timeout_command(Some(Duration::from_secs(30))),
+            "SET statement_timeout = 30000"
+        );
+        assert_eq!(
+            pg_statement_timeout_command(None),
+            "SET statement_timeout = 0"
+        );
+    }
 
     #[test]
     fn redact_hides_every_occurrence() {

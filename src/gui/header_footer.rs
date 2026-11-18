@@ -244,6 +244,11 @@ impl RustSqlGuiApp {
             } else {
                 ui.label(RichText::new("Ready").weak());
             }
+            if let Some(t) = self.store.statement_timeout_label() {
+                ui.separator();
+                ui.label(RichText::new(t).small())
+                    .on_hover_text("Per-statement timeout for this connection");
+            }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.small_button("⌨ Shortcuts").clicked() {

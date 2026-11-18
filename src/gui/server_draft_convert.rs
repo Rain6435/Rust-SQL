@@ -125,6 +125,13 @@ impl ServerFormDraft {
             },
             schema: opt_str(&self.schema, "server:schema"),
             filter,
+            statement_timeout_secs: self
+                .statement_timeout_secs
+                .trim()
+                .parse::<u32>()
+                .ok()
+                .filter(|s| *s > 0),
+            exclude_from_history: self.exclude_from_history.then_some(true),
         }
     }
 }

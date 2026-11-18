@@ -113,6 +113,17 @@ impl RustSqlGuiApp {
                 .resizable(true)
                 .default_width(600.0)
                 .show(ctx, |ui| {
+                    let rows = stats.first().map(|s| s.total_rows).unwrap_or(0);
+                    let partial = self
+                        .store
+                        .current_query()
+                        .and_then(|q| q.page.as_ref())
+                        .is_some_and(|p| p.next.is_some());
+                    ui.label(if partial {
+                        format!("Computed over the {rows} rows loaded so far, not the full result. Load more rows to include them.")
+                    } else {
+                        format!("Computed over all {rows} rows of the result.")
+                    });
                     egui::Grid::new("col_stats_grid")
                         .striped(true)
                         .show(ui, |ui| {

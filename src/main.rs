@@ -2,9 +2,11 @@
 //! Web UI (`--web`), Mermaid ERD generation (`--erd`), and headless batch SQL execution (`--exec`).
 
 mod cli_batch;
+mod cli_import;
 mod cli_users;
 
 use cli_batch::{resolve_batch_server, run_headless_batch};
+use cli_import::{run_import_cli, ImportArgs};
 use cli_users::run_users_cli;
 use rust_sql::adapters::{set_emulation_enabled, set_select_limit};
 use rust_sql::core::config::get_full_sync;
@@ -35,6 +37,9 @@ Options:
   --uri <CONN_URI>         Connection URI for batch execution or ERD generation
   --server <NAME_OR_ID>    Saved server name or ID for batch execution
   --format <FMT>           Output format: json, jsonl, csv, markdown, sql (default: json)
+  --import <FILE>          Import a .csv/.tsv/.json/.jsonl file into --table <TABLE>
+                           (optional --schema <S>), in one transaction. Columns map by
+                           name. 10,000+ rows require --yes
   --read-only              Enforce Read-Only safety guardrail
   --emulate                Allow MySQL, MariaDB, SQL Server and Cassandra to run on an
                            in-memory emulator (no live driver yet). Results are NOT from
@@ -106,6 +111,29 @@ fn main() {
     let format_type = find_arg("--format", None).unwrap_or_else(|| "json".to_string());
     let read_only = args.iter().any(|a| a == "--read-only");
     let want_erd = args.iter().any(|a| a == "--erd");
+
+    if let Some(file) = find_arg("--import", None) {
+        let Some(table) = find_arg("--table", None) else {
+            eprintln!("--import needs --table <TABLE>");
+            std::process::exit(1);
+        };
+        let schema = find_arg("--schema", None);
+        let srv = resolve_batch_server(conn_uri.as_deref(), server_key.as_deref(), &config_data);
+        let trust = find_arg("--trust-host-key", None);
+        run_import_cli(
+            srv,
+            ImportArgs {
+                file: &file,
+                table: &table,
+                schema: schema.as_deref(),
+                confirmed: args.iter().any(|a| a == "--yes"),
+                read_only,
+                csv_delimiter: &config_data.csv_delimiter,
+                trust_host_key: trust.as_deref(),
+            },
+        );
+        return;
+    }
 
     if exec_sql.is_some() || want_erd {
         let srv = resolve_batch_server(conn_uri.as_deref(), server_key.as_deref(), &config_data);

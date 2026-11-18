@@ -1,11 +1,14 @@
 //! Application state store (`AppStore`) combining all state slices, database session facade,
 //! query bookmarks/audit history, read-only guardrail mode, and runtime query parameters.
 
+pub mod completion;
 pub mod config_servers;
 pub mod connections;
+pub mod history;
 pub mod host_keys;
 pub mod metadata;
 pub mod metadata_table;
+pub mod paging;
 pub mod queries;
 pub mod scripts;
 pub mod slices_meta;
@@ -16,7 +19,7 @@ pub use slices_meta::{
     RoutineItem, RoutineState, SchemaState, ServerState, TableState, TriggerState, ViewState,
 };
 pub use slices_query::{
-    DbObjectType, ObjectScripts, QueryState, QueryTab, ScriptActionType, ScriptState,
+    DbObjectType, ObjectScripts, QueryState, QueryTab, ScriptActionType, ScriptState, TabPage,
 };
 
 use crate::adapters::DatabaseFacade;
@@ -90,6 +93,15 @@ impl AppStore {
     pub fn current_query_mut(&mut self) -> Option<&mut QueryTab> {
         let id = self.queries.current_query_id?;
         self.queries.queries_by_id.get_mut(&id)
+    }
+
+    /// The connected server's statement timeout as a UI label (`"Timeout: 30s"`), if connected.
+    pub fn statement_timeout_label(&self) -> Option<String> {
+        self.connections
+            .server
+            .as_ref()
+            .filter(|_| self.connections.connected)
+            .map(|s| s.statement_timeout_label())
     }
 
     /// Returns the database name associated with the active query tab or the most recent connection.

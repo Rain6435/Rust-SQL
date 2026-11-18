@@ -42,6 +42,24 @@ pub struct QueryTab {
     pub result_items_per_page: u32,
     /// Elapsed execution time in milliseconds for the last run.
     pub execution_time: Option<u64>,
+    /// Paging state when the last result was fetched page by page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<TabPage>,
+}
+
+/// Paging state of a tab whose result is a single `SELECT` fetched page by page.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabPage {
+    /// The query as written (each page wraps it, see [`crate::core::paging`]).
+    pub query: String,
+    /// Parameter values the first page ran with, reused for later pages.
+    #[serde(skip)]
+    pub params: crate::core::params::QueryParams,
+    /// Rows per page.
+    pub page_size: u32,
+    /// The next page, or `None` when every row is loaded.
+    pub next: Option<crate::core::paging::PageCursor>,
 }
 
 /// State slice managing all open SQL query tabs and editor preferences.

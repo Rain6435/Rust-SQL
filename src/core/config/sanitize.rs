@@ -108,6 +108,12 @@ pub fn get_full_sync(force_clean_cache: bool) -> Result<Config, String> {
             .base
             .emulate_unsupported_dialects
             .unwrap_or(false),
+        history_store_bound_values: app_config.base.history_store_bound_values.unwrap_or(false),
+        result_page_size: app_config
+            .base
+            .result_page_size
+            .filter(|n| *n > 0)
+            .unwrap_or_else(crate::common::types::default_result_page_size),
         connections_as_list: app_config.base.connections_as_list.unwrap_or(false),
         custom_font: app_config
             .base

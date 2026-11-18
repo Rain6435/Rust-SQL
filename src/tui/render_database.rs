@@ -88,7 +88,10 @@ impl TuiApp {
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(query_border_style)
-                .title(" Query "),
+                .title(match self.store.statement_timeout_label() {
+                    Some(t) => format!(" Query ({t}) "),
+                    None => " Query ".to_string(),
+                }),
         );
         f.render_widget(query_box, r_chunks[0]);
 
@@ -106,7 +109,21 @@ impl TuiApp {
                     .add_modifier(Modifier::BOLD),
             ))
         } else {
-            Line::from(" Query Results ")
+            let page = self.store.current_query().and_then(|q| q.page.as_ref());
+            Line::from(
+                match (
+                    page,
+                    self.store.current_query().and_then(|q| q.results.as_ref()),
+                ) {
+                    (Some(p), Some(r)) => format!(
+                        " Query Results ({} rows loaded, page size {}{}) ",
+                        r.first().map(|x| x.rows.len()).unwrap_or(0),
+                        p.page_size,
+                        if p.next.is_some() { ", [m] more" } else { "" }
+                    ),
+                    _ => " Query Results ".to_string(),
+                },
+            )
         };
         let results_block = Block::default()
             .borders(Borders::ALL)
@@ -169,7 +186,9 @@ impl TuiApp {
             DatabaseFocus::Params => {
                 " [Up/Down] Parameter  [C-t] Type  [C-x/F5] Execute  [Tab] Results  [Esc] Editor"
             }
-            DatabaseFocus::QueryResults => " [Tab/C-e] Editor  [Esc] Table List  [q] Quit",
+            DatabaseFocus::QueryResults => {
+                " [m] More rows  [Tab/C-e] Editor  [Esc] Table List  [q] Quit"
+            }
         };
         f.render_widget(
             Paragraph::new(shortcut_text).style(Style::default().fg(Color::Cyan)),

@@ -99,6 +99,9 @@ pub enum DbCoreError {
     /// The SSH tunnel could not be opened (host key, authentication, or bastion error).
     #[error("{0}")]
     Tunnel(#[from] crate::core::tunnel::TunnelError),
+    /// A statement ran longer than the connection's statement timeout and was stopped.
+    #[error("Statement timed out: {0}")]
+    StatementTimeout(String),
     /// General driver or execution error message.
     #[error("{0}")]
     Message(String),

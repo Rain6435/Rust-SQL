@@ -20,6 +20,8 @@ You can also override the configuration directory via the `$RUST_SQL_HOME` envir
   "connectionsAsList": false,
   "customFont": "Lato",
   "emulateUnsupportedDialects": false,
+  "historyStoreBoundValues": false,
+  "resultPageSize": 1000,
   "web": {
     "bindAddress": "127.0.0.1",
     "port": 8080,
@@ -53,7 +55,9 @@ You can also override the configuration directory via the `$RUST_SQL_HOME` envir
       },
       "id": "651abe80-ed50-44a1-b778-1bdfe97b0bec",
       "name": "rust-sql-localhost",
-      "client": "postgresql"
+      "client": "postgresql",
+      "statementTimeoutSecs": 30,
+      "excludeFromHistory": false
     }
   ]
 }
@@ -87,6 +91,23 @@ to them fails with a "not implemented" error. Setting this to `true` (or startin
 `--emulate`) lets those dialects run on an in-memory emulator instead. Emulated results are **not
 from your server**, and every front end labels them "EMULATED — results are not from your
 server." This setting has no effect on PostgreSQL, Redshift, or SQLite, which always connect live.
+
+### `historyStoreBoundValues`
+
+Default `false`. Query history keeps each query with its placeholders (`:email`, `$1`) and never
+the parameter values. Set to `true` to also keep a display-only copy with the values filled in.
+
+### `resultPageSize`
+
+Default `1000`. Rows fetched per page when a query is a single `SELECT`; more rows load on demand
+("Load more" in the GUI and web UI, <kbd>m</kbd> in the terminal UI).
+
+### Per-connection: `statementTimeoutSecs` and `excludeFromHistory`
+
+`statementTimeoutSecs` stops any statement that runs longer than this many seconds (absent or `0`
+means no timeout). PostgreSQL and Redshift use the server's `statement_timeout`; SQLite interrupts
+the statement and uses `busy_timeout` for lock waits. `excludeFromHistory: true` keeps every query
+run on that connection out of query history.
 
 ### `web`
 
