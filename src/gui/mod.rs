@@ -119,6 +119,14 @@ pub struct RustSqlGuiApp {
     pub completion: Option<crate::core::completion::Completions>,
     /// Data import modal state, while the modal is open.
     pub import_modal: Option<modal_import::ImportModalState>,
+    /// Cached GPU texture handle for the application logo.
+    pub logo_texture: Option<egui::TextureHandle>,
+}
+
+pub(crate) const APP_LOGO_PNG: &[u8] = include_bytes!("../../assets/logo.png");
+
+pub(crate) fn load_app_icon() -> Option<egui::IconData> {
+    eframe::icon_data::from_png_bytes(APP_LOGO_PNG).ok()
 }
 
 impl RustSqlGuiApp {
@@ -167,6 +175,7 @@ impl RustSqlGuiApp {
             update_apply_message: None,
             import_modal: None,
             completion: None,
+            logo_texture: None,
         }
     }
 
@@ -226,11 +235,16 @@ pub fn run_native_gui() -> Result<(), String> {
             .map_err(|e| e.to_string())?,
     );
 
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title("Rust-SQL")
+        .with_inner_size([1200.0, 800.0])
+        .with_min_inner_size([800.0, 550.0]);
+    if let Some(icon) = load_app_icon() {
+        viewport = viewport.with_icon(Arc::new(icon));
+    }
+
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("Rust-SQL")
-            .with_inner_size([1200.0, 800.0])
-            .with_min_inner_size([800.0, 550.0]),
+        viewport,
         ..Default::default()
     };
 
@@ -240,4 +254,17 @@ pub fn run_native_gui() -> Result<(), String> {
         Box::new(move |_cc| Ok(Box::new(RustSqlGuiApp::new(rt)))),
     )
     .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::load_app_icon;
+
+    #[test]
+    fn app_logo_decodes_to_valid_icon_data() {
+        let icon = load_app_icon().expect("embedded assets/logo.png should decode");
+        assert_eq!(icon.width, 512);
+        assert_eq!(icon.height, 512);
+        assert_eq!(icon.rgba.len(), 512 * 512 * 4);
+    }
 }

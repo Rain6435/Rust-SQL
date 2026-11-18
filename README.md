@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Rust-SQL Logo" width="180" />
+</p>
+
 # Rust-SQL
 
 [![CI](https://github.com/Rain6435/Rust-SQL/actions/workflows/ci.yml/badge.svg)](https://github.com/Rain6435/Rust-SQL/actions/workflows/ci.yml)
