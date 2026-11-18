@@ -68,6 +68,7 @@ async fn connect(ctx: &IpcCtx<'_>, args: &[Value]) -> IpcResponse {
         let _ = db.disconnect_server().await;
         ctx.session.set_connected_server(None);
     }
+    db.keys = crate::core::keys::SharedKeyProvider(ctx.app.keys.clone());
     match db.connect_checked(srv, database.as_deref()).await {
         Ok(()) => {
             ctx.session.set_connected_server(Some(id));

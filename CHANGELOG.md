@@ -146,6 +146,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (CVE-2026-119375): SQLite before 3.54.0 could return uninitialized memory when opening a
   database file with a crafted `-wal` file. The advisory is no longer ignored in `deny.toml` or the
   audit workflow.
+- **SSH host-key pins are encrypted.** The `sshHostKeys` list in `rust-sql.json` is now one
+  XChaCha20-Poly1305 value under the OS keychain master key (its own HKDF subkey), so pins can no
+  longer be read, edited, or swapped in without the keychain. Without the keychain, SSH tunnels
+  are refused instead of connecting unverified. Plaintext pins from earlier builds are discarded
+  at startup (no migration); approve each bastion's fingerprint again.
 
 ## [1.41.1] - 2026-11-17
 

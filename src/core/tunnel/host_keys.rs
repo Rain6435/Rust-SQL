@@ -1,17 +1,19 @@
 //! Trust-on-first-use host-key verification with a 180-day re-confirmation timer.
 //!
-//! Pins live in the `sshHostKeys` list of the configuration store, which is not encrypted (see
-//! `docs/security/threat-model.md`, "Known gaps"). Every approval and deletion is written
-//! to the `audit_events` table of the application database; if that write fails, the call
-//! returns an error.
+//! This module holds the pure decision logic. Persistence lives in [`super::pin_store`]: the pin
+//! list is stored encrypted under the OS keychain master key, and every approval and deletion
+//! is written to the `audit_events` table of the application database.
 
 use super::error::TunnelError;
 use crate::common::types::{
     HostKeyChallenge, HostKeyChallengeKind, SshHostKeyPin, HOST_KEY_RECONFIRM_AFTER_DAYS,
 };
-use crate::core::appdb::{AppDb, AuditActor, AuditEvent, AuditKind};
-use crate::core::config;
 use time::{Duration, OffsetDateTime};
+
+pub use super::pin_store::{
+    approve_host_key, approve_host_key_audited, decrypt_pins, delete_host_key,
+    delete_host_key_audited, encrypt_pins, load_pins, PIN_STORE_FIELD, PIN_STORE_RECORD,
+};
 
 /// Result of comparing a presented host key against the stored pins.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,7 +56,7 @@ impl PresentedHostKey {
     }
 }
 
-fn same_endpoint(pin: &SshHostKeyPin, host: &str, port: u32) -> bool {
+pub(super) fn same_endpoint(pin: &SshHostKeyPin, host: &str, port: u32) -> bool {
     pin.port == port && pin.host.eq_ignore_ascii_case(host)
 }
 
@@ -149,95 +151,6 @@ pub fn apply_approval(
         approved_at: now,
     });
     Ok(())
-}
-
-/// Loads all host-key pins from the configuration store.
-pub fn load_pins() -> Result<Vec<SshHostKeyPin>, TunnelError> {
-    Ok(config::get_sync()
-        .map_err(TunnelError::PinStore)?
-        .ssh_host_keys)
-}
-
-fn audit(db: Option<&AppDb>, event: AuditEvent) -> Result<(), TunnelError> {
-    let result = match db {
-        Some(db) => db.record_audit(&event),
-        None => crate::core::appdb::audit::record_to_default_db(&event),
-    };
-    result.map_err(|e| TunnelError::PinStore(format!("audit log write failed: {e}")))
-}
-
-/// Persists the local user's approval (or re-confirmation) of `challenge` and audits it.
-pub fn approve_host_key(challenge: &HostKeyChallenge) -> Result<(), TunnelError> {
-    approve_host_key_inner(challenge, None, &AuditActor::local())
-}
-
-/// Persists `actor`'s approval of `challenge`, auditing it in `db`.
-pub fn approve_host_key_audited(
-    challenge: &HostKeyChallenge,
-    db: &AppDb,
-    actor: &AuditActor,
-) -> Result<(), TunnelError> {
-    approve_host_key_inner(challenge, Some(db), actor)
-}
-
-fn approve_host_key_inner(
-    challenge: &HostKeyChallenge,
-    db: Option<&AppDb>,
-    actor: &AuditActor,
-) -> Result<(), TunnelError> {
-    let mut file = config::get_sync().map_err(TunnelError::PinStore)?;
-    apply_approval(
-        &mut file.ssh_host_keys,
-        challenge,
-        OffsetDateTime::now_utc(),
-    )?;
-    config::save_sync(&file).map_err(TunnelError::PinStore)?;
-    let detail = format!(
-        "{:?} {}:{} {} {}",
-        challenge.kind,
-        challenge.host,
-        challenge.port,
-        challenge.key_algorithm,
-        challenge.fingerprint_sha256
-    );
-    audit(
-        db,
-        AuditEvent::new(AuditKind::HostKeyApproved, actor).detail(detail),
-    )
-}
-
-/// Deletes the pin for `host:port` on behalf of the local user. Returns whether one was removed.
-pub fn delete_host_key(host: &str, port: u32) -> Result<bool, TunnelError> {
-    delete_host_key_inner(host, port, None, &AuditActor::local())
-}
-
-/// Deletes the pin for `host:port` on behalf of `actor`, auditing it in `db`.
-pub fn delete_host_key_audited(
-    host: &str,
-    port: u32,
-    db: &AppDb,
-    actor: &AuditActor,
-) -> Result<bool, TunnelError> {
-    delete_host_key_inner(host, port, Some(db), actor)
-}
-
-fn delete_host_key_inner(
-    host: &str,
-    port: u32,
-    db: Option<&AppDb>,
-    actor: &AuditActor,
-) -> Result<bool, TunnelError> {
-    let mut file = config::get_sync().map_err(TunnelError::PinStore)?;
-    let before = file.ssh_host_keys.len();
-    file.ssh_host_keys.retain(|p| !same_endpoint(p, host, port));
-    let removed = file.ssh_host_keys.len() != before;
-    if removed {
-        config::save_sync(&file).map_err(TunnelError::PinStore)?;
-        let event =
-            AuditEvent::new(AuditKind::HostKeyDeleted, actor).detail(format!("{host}:{port}"));
-        audit(db, event)?;
-    }
-    Ok(removed)
 }
 
 #[cfg(test)]

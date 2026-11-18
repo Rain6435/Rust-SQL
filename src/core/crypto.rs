@@ -2,10 +2,14 @@
 //!
 //! - **Cipher:** XChaCha20-Poly1305 with a fresh random 24-byte nonce for every value.
 //! - **Key:** a subkey derived with HKDF-SHA256 from the 256-bit master key held in the OS
-//!   keychain (see [`crate::core::keys`]), using the info string [`CREDENTIAL_KEY_INFO`]. No key
-//!   is ever derived from a password or a constant.
-//! - **Associated data:** the record (connection) ID and the field name, length-prefixed, so a
-//!   ciphertext moved to another connection or another field fails to decrypt.
+//!   keychain (see [`crate::core::keys`]). Each [`Purpose`] has its own HKDF info string and
+//!   associated-data domain, so saved credentials ([`Purpose::CREDENTIALS`], info
+//!   [`CREDENTIAL_KEY_INFO`]) and SSH host-key pins ([`Purpose::HOST_KEY_PINS`], info
+//!   [`HOST_KEY_PINS_KEY_INFO`]) never share a subkey. No key is ever derived from a password or
+//!   a constant.
+//! - **Associated data:** the purpose's domain, the record ID and the field name,
+//!   length-prefixed, so a ciphertext moved to another record, field, or purpose fails to
+//!   decrypt.
 //! - **Encoding:** `v2:` followed by standard base64 of `nonce || ciphertext || tag`. Values
 //!   without a recognized version prefix are rejected; there is no legacy format.
 
@@ -26,7 +30,28 @@ pub const FORMAT_V2_PREFIX: &str = "v2:";
 /// HKDF info string for the subkey that encrypts saved connection credentials.
 pub const CREDENTIAL_KEY_INFO: &[u8] = b"rust-sql/v2/connection-credentials";
 
-const AAD_DOMAIN: &[u8] = b"rust-sql/v2/credential";
+/// HKDF info string for the subkey that encrypts the SSH host-key pin list.
+pub const HOST_KEY_PINS_KEY_INFO: &[u8] = b"rust-sql/v2/ssh-host-key-pins";
+
+/// What a value is encrypted for: selects the HKDF subkey and the associated-data domain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Purpose {
+    key_info: &'static [u8],
+    aad_domain: &'static [u8],
+}
+
+impl Purpose {
+    /// Saved connection credentials (passwords and passphrases).
+    pub const CREDENTIALS: Purpose = Purpose {
+        key_info: CREDENTIAL_KEY_INFO,
+        aad_domain: b"rust-sql/v2/credential",
+    };
+    /// The trusted SSH host-key pin list.
+    pub const HOST_KEY_PINS: Purpose = Purpose {
+        key_info: HOST_KEY_PINS_KEY_INFO,
+        aad_domain: b"rust-sql/v2/ssh-host-key-pins",
+    };
+}
 const NONCE_LEN: usize = 24;
 const TAG_LEN: usize = 16;
 
@@ -54,18 +79,19 @@ pub enum CryptoError {
     InvalidUtf8,
 }
 
-fn credential_cipher(key: &MasterKey) -> XChaCha20Poly1305 {
+fn cipher_for(purpose: Purpose, key: &MasterKey) -> XChaCha20Poly1305 {
     let hk = Hkdf::<Sha256>::new(None, key.as_bytes());
     let mut sub = Zeroizing::new([0u8; 32]);
-    hk.expand(CREDENTIAL_KEY_INFO, sub.as_mut())
+    hk.expand(purpose.key_info, sub.as_mut())
         .expect("32 bytes is a valid HKDF-SHA256 output length");
     XChaCha20Poly1305::new(&Key::from(*sub))
 }
 
 /// Builds the associated data binding a value to `record_id` and `field`.
-fn associated_data(record_id: &str, field: &str) -> Vec<u8> {
-    let mut aad = Vec::with_capacity(AAD_DOMAIN.len() + record_id.len() + field.len() + 8);
-    aad.extend_from_slice(AAD_DOMAIN);
+fn associated_data(purpose: Purpose, record_id: &str, field: &str) -> Vec<u8> {
+    let domain = purpose.aad_domain;
+    let mut aad = Vec::with_capacity(domain.len() + record_id.len() + field.len() + 8);
+    aad.extend_from_slice(domain);
     for part in [record_id, field] {
         aad.extend_from_slice(&(part.len() as u32).to_be_bytes());
         aad.extend_from_slice(part.as_bytes());
@@ -82,13 +108,24 @@ pub fn encrypt(
     record_id: &str,
     field: &str,
 ) -> Result<EncryptedPassword, CryptoError> {
+    encrypt_for(Purpose::CREDENTIALS, plain_text, key, record_id, field)
+}
+
+/// Encrypts `plain_text` for `purpose`, bound to `record_id` and `field`.
+pub fn encrypt_for(
+    purpose: Purpose,
+    plain_text: &str,
+    key: &MasterKey,
+    record_id: &str,
+    field: &str,
+) -> Result<EncryptedPassword, CryptoError> {
     if record_id.trim().is_empty() {
         return Err(CryptoError::MissingRecordId);
     }
     let mut nonce = [0u8; NONCE_LEN];
     rand::rng().fill_bytes(&mut nonce);
-    let aad = associated_data(record_id, field);
-    let ct = credential_cipher(key)
+    let aad = associated_data(purpose, record_id, field);
+    let ct = cipher_for(purpose, key)
         .encrypt(
             &XNonce::from(nonce),
             Payload {
@@ -112,6 +149,18 @@ pub fn decrypt(
     record_id: &str,
     field: &str,
 ) -> Result<SecretString, CryptoError> {
+    decrypt_for(Purpose::CREDENTIALS, encrypted, key, record_id, field)
+}
+
+/// Decrypts `encrypted`, which must have been produced for the same `purpose`, `record_id`, and
+/// `field`.
+pub fn decrypt_for(
+    purpose: Purpose,
+    encrypted: &EncryptedPassword,
+    key: &MasterKey,
+    record_id: &str,
+    field: &str,
+) -> Result<SecretString, CryptoError> {
     if record_id.trim().is_empty() {
         return Err(CryptoError::MissingRecordId);
     }
@@ -125,9 +174,9 @@ pub fn decrypt(
     }
     let (nonce, ct) = blob.split_at(NONCE_LEN);
     let nonce: [u8; NONCE_LEN] = nonce.try_into().map_err(|_| CryptoError::Malformed)?;
-    let aad = associated_data(record_id, field);
+    let aad = associated_data(purpose, record_id, field);
     let plain = Zeroizing::new(
-        credential_cipher(key)
+        cipher_for(purpose, key)
             .decrypt(&XNonce::from(nonce), Payload { msg: ct, aad: &aad })
             .map_err(|_| CryptoError::AuthenticationFailed)?,
     );
