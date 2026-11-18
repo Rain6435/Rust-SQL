@@ -9,6 +9,7 @@ use crate::common::types::{
     ListTableResult, ListViewResult, QueryRowResult, SchemaFilter, Server, TableKeysResult,
 };
 use crate::core::errors::DbCoreError;
+use crate::core::keys::SharedKeyProvider;
 use crate::core::tunnel::{connect_tunnel, TunnelHandle};
 use std::sync::Arc;
 
@@ -28,6 +29,8 @@ pub struct DatabaseConnection {
     pub ssh_tunnel: Option<Arc<TunnelHandle>>,
     /// Read-Only mode: applied to the database session on every connect.
     pub read_only: bool,
+    /// Master-key source for decrypting SSH host-key pins (the OS keychain in production).
+    pub keys: SharedKeyProvider,
 }
 
 impl DatabaseConnection {
@@ -41,6 +44,7 @@ impl DatabaseConnection {
             connection: None,
             ssh_tunnel: None,
             read_only: false,
+            keys: SharedKeyProvider::default(),
         }
     }
 
@@ -64,7 +68,7 @@ impl DatabaseConnection {
         }
 
         if self.server_config.ssh.is_some() && self.ssh_tunnel.is_none() {
-            match connect_tunnel(&self.server_config).await {
+            match connect_tunnel(&self.server_config, &*self.keys.0).await {
                 Ok(tunnel) => {
                     self.server_config.local_host = Some(tunnel.local_host());
                     self.server_config.local_port = Some(tunnel.local_port());

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-18
+
+This release replaces placeholder behavior with real implementations across connections,
+credentials, the web server, and query safety. It is a major version because existing
+configurations and integrations need changes:
+
+- **Saved passwords must be entered again.** The old AES-256-CBC format is gone with no migration,
+  and the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service) is now
+  required to store or read saved credentials.
+- **SSH bastion fingerprints must be approved again.** Plaintext host-key pins are discarded.
+- **The web server needs an account and HTTPS.** Create an administrator with
+  `Rust-SQL users create --admin`; use `--insecure-http` for plain HTTP on loopback.
+- **MySQL, MariaDB, SQL Server, and Cassandra fail to connect** unless emulation is turned on
+  with `--emulate` or `"emulateUnsupportedDialects": true`; they have no live driver yet.
+- **IPC changes:** `DB_CONNECT` takes a saved connection ID and `SERVERS_DECRYPT_SECRETS` was removed.
+
 ### Added
 - **CSV and JSON import.** Import `.csv`/`.tsv`/`.json`/`.jsonl` rows into an existing table from
   the desktop GUI (`📥 Import`: preview, per-column mapping) or the CLI
@@ -27,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   autocomplete list under the editor (a `<textarea>` now). New IPC events `DB_IMPORT_PREVIEW`,
   `DB_IMPORT_RUN`, `DB_COMPLETE` (grant required); `/api/ipc/import` takes import bodies up to
   16 MiB with the same session and CSRF checks. Imports are audited.
+- **Application logo** in the desktop GUI (window icon and header), the web UI (favicon and
+  header), and the README.
 - **`--tui --read-only`** runs the terminal UI in Read-Only mode (queries and imports).
 - **Live database CI job** that starts PostgreSQL, MySQL, and MariaDB and fails if any returns
   emulated results when a live connection was requested.
@@ -100,8 +118,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     response contains a saved password (`hasPassword` and similar flags instead). `DB_CONNECT`
     now takes a saved connection ID.
   - The built-in default encryption secret was removed. Saved passwords are encrypted only with
-    the master key from the OS keychain provider, which arrives in the next release; until then
-    saved passwords cannot be stored or decrypted.
+    the master key from the OS keychain (see above).
 - **SSH tunnels now actually use SSH.** Previously the "SSH tunnel" option opened a local port
   that connected straight to the database host, never contacting the bastion.
   - Connections authenticate to the bastion with `russh` (SSH agent, then private key with
@@ -146,6 +163,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (CVE-2026-119375): SQLite before 3.54.0 could return uninitialized memory when opening a
   database file with a crafted `-wal` file. The advisory is no longer ignored in `deny.toml` or the
   audit workflow.
+- **SSH host-key pins are encrypted.** The `sshHostKeys` list in `rust-sql.json` is now one
+  XChaCha20-Poly1305 value under the OS keychain master key (its own HKDF subkey), so pins can no
+  longer be read, edited, or swapped in without the keychain. Without the keychain, SSH tunnels
+  are refused instead of connecting unverified. Plaintext pins from earlier builds are discarded
+  at startup (no migration); approve each bastion's fingerprint again.
 
 ## [1.41.1] - 2026-11-17
 

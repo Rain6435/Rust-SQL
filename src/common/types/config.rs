@@ -96,9 +96,14 @@ pub struct ConfigFile {
     /// User-customized base preferences.
     #[serde(flatten)]
     pub base: BaseConfig,
-    /// Trusted SSH bastion host keys, one per `host:port` (trust on first use).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub ssh_host_keys: Vec<super::SshHostKeyPin>,
+    /// Trusted SSH bastion host keys (trust on first use), encrypted as one list. Read and
+    /// written only through [`crate::core::tunnel::host_keys`]. A plaintext list from an older
+    /// build is read but never written back.
+    #[serde(
+        default,
+        skip_serializing_if = "super::StoredHostKeyPins::skip_serializing"
+    )]
+    pub ssh_host_keys: Option<super::StoredHostKeyPins>,
     /// Multi-user web server settings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub web: Option<super::WebConfig>,

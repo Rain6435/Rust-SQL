@@ -32,7 +32,7 @@ pub(crate) async fn connect_db(
     };
     match (t.host_key_challenge(), trust) {
         (Some(ch), Some(fp)) if ch.fingerprint_sha256 == fp => {
-            approve_host_key(ch).map_err(|e| e.to_string())?;
+            approve_host_key(ch, &*db_conn.keys.0).map_err(|e| e.to_string())?;
             db_conn.connect().await.map_err(|e| e.to_string())
         }
         (Some(ch), _) => Err(format!(

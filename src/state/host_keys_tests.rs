@@ -2,8 +2,11 @@
 
 use crate::common::types::{HostKeyChallengeKind, Password, Server, SshConfig};
 use crate::core::config::{self, set_config_path_override};
+use crate::core::keys::{InMemoryKeyProvider, SharedKeyProvider};
+use crate::core::tunnel::host_keys::{decrypt_pins, load_pins};
 use crate::core::tunnel::test_server::{fingerprint, spawn_bastion, test_key};
 use crate::state::AppStore;
+use std::sync::Arc;
 
 #[test]
 fn approve_without_prompt_is_an_error() {
@@ -45,6 +48,8 @@ async fn prompt_then_approval() {
         ..Default::default()
     };
     let mut store = AppStore::new();
+    let keys = Arc::new(InMemoryKeyProvider::new_for_tests());
+    store.keys = SharedKeyProvider(keys.clone());
 
     // First attempt: unknown key becomes a prompt; nothing is pinned and nothing is forwarded.
     let err = store.test_connection(server.clone()).await.unwrap_err();
@@ -52,13 +57,20 @@ async fn prompt_then_approval() {
     let prompt = store.connections.host_key_prompt.clone().expect("prompt");
     assert_eq!(prompt.kind, HostKeyChallengeKind::Unknown);
     assert_eq!(prompt.fingerprint_sha256, fp);
-    assert!(config::get_sync().unwrap().ssh_host_keys.is_empty());
+    assert!(config::get_sync().unwrap().ssh_host_keys.is_none());
     assert!(state.channel_requests.lock().unwrap().is_empty());
 
     // Approval pins the key; the retry gets through SSH and only fails at the fake database.
     assert_eq!(store.approve_host_key(), Ok(None));
-    let pins = config::get_sync().unwrap().ssh_host_keys;
+    let stored = config::get_sync().unwrap().ssh_host_keys;
+    let pins = decrypt_pins(stored.as_ref(), &*keys).unwrap();
     assert_eq!(pins.len(), 1);
+    assert_eq!(store.list_host_keys().unwrap(), pins);
+    let raw = std::fs::read_to_string(dir.path().join("rust-sql.json")).unwrap();
+    assert!(
+        !raw.contains(&fp) && raw.contains("\"v2:"),
+        "pins not encrypted: {raw}"
+    );
     assert_eq!(pins[0].fingerprint_sha256, fp);
     let err = store.test_connection(server).await.unwrap_err();
     assert!(store.connections.host_key_prompt.is_none());
@@ -73,7 +85,8 @@ async fn prompt_then_approval() {
         store.delete_host_key("127.0.0.1", u32::from(ssh_port)),
         Ok(true)
     );
-    assert!(config::get_sync().unwrap().ssh_host_keys.is_empty());
+    assert!(config::get_sync().unwrap().ssh_host_keys.is_none());
+    assert_eq!(load_pins(&*keys).unwrap(), []);
 
     // Both the approval and the deletion are in the audit log, attributed to the local user.
     let audit = crate::core::appdb::AppDb::open_default()

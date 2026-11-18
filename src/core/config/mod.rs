@@ -85,6 +85,8 @@ pub fn get_config_path() -> PathBuf {
 
 /// Synchronously ensures the configuration file exists on disk and sanitizes/encrypts all server entries.
 ///
+/// SSH host-key pins left in the removed plaintext format are discarded (there is no migration).
+///
 /// The master key is requested from `keys` only if a plaintext password must be encrypted.
 pub fn prepare_sync(keys: &dyn KeyProvider) -> Result<(), String> {
     let filename = get_config_path();
@@ -97,6 +99,14 @@ pub fn prepare_sync(keys: &dyn KeyProvider) -> Result<(), String> {
 
     let mut result: ConfigFile = read_json_file_sync(&filename)?;
     result.servers = sanitize_servers(&result, keys)?;
+    if matches!(
+        result.ssh_host_keys,
+        Some(crate::common::types::StoredHostKeyPins::LegacyPlaintext(_))
+    ) {
+        // No migration: drop the plaintext so the next connection asks for approval again.
+        log::warn!("Discarding plaintext SSH host-key pins from an older Rust-SQL build");
+        result.ssh_host_keys = None;
+    }
     write_json_file_sync(&filename, &result)?;
     Ok(())
 }

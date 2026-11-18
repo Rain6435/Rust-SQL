@@ -65,24 +65,24 @@ You can also override the configuration directory via the `$RUST_SQL_HOME` envir
 
 ### `sshHostKeys`
 
-Trusted SSH bastion host keys, written when you approve a fingerprint. One entry per bastion:
+Trusted SSH bastion host keys, written when you approve a fingerprint. The whole list is
+encrypted with the OS keychain master key, the same way as saved passwords, so the file shows
+neither the bastions nor their fingerprints:
 
 ```json
-"sshHostKeys": [
-  {
-    "host": "bastion.example.com",
-    "port": 22,
-    "keyAlgorithm": "ssh-ed25519",
-    "fingerprintSha256": "SHA256:BCOriMCRjlJk88UWPoBgqazxhQtK7SfD3idd6RvyZTQ",
-    "approvedAt": "2026-11-17T18:30:00Z"
-  }
-]
+"sshHostKeys": { "ciphertext": "v2:..." }
 ```
 
-`approvedAt` is UTC. A pin older than 180 days must be re-confirmed in the app before the
-tunnel connects. A different key for the same `host:port` is refused; remove the entry (Settings →
-"Trusted SSH host keys") to accept a rotated key. Editing a fingerprint by hand does not bypass the
-check: a mismatch is always refused.
+Decrypted, it holds one entry per bastion `host:port` with the key algorithm, the `SHA256:`
+fingerprint, and when you approved it (UTC). A pin older than 180 days must be re-confirmed in the
+app before the tunnel connects. A different key for the same `host:port` is refused; remove the
+pin (Settings → "Trusted SSH host keys") to accept a rotated key. The value cannot be edited by
+hand: any change makes it undecryptable, and SSH tunnels are then refused until you delete the
+`sshHostKeys` entry and approve each bastion again. Without the OS keychain, pins can be neither
+read nor saved, so SSH tunnels fail rather than connect unverified.
+
+Builds before 2026-11-18 stored this list as plaintext JSON. There is no migration: Rust-SQL
+discards a plaintext list when it starts, and asks you to approve each bastion's fingerprint again.
 
 ### `emulateUnsupportedDialects`
 

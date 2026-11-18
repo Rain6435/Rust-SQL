@@ -45,7 +45,7 @@ impl AppStore {
         &mut self,
         challenge: &HostKeyChallenge,
     ) -> Result<(), String> {
-        tunnel::approve_host_key(challenge).map_err(|e| e.to_string())?;
+        tunnel::approve_host_key(challenge, self.key_provider()).map_err(|e| e.to_string())?;
         self.status = format!(
             "Trusted SSH host key {} for {}:{}",
             challenge.fingerprint_sha256, challenge.host, challenge.port
@@ -61,12 +61,13 @@ impl AppStore {
 
     /// Lists trusted SSH bastion host keys.
     pub fn list_host_keys(&self) -> Result<Vec<SshHostKeyPin>, String> {
-        tunnel::load_pins().map_err(|e| e.to_string())
+        tunnel::load_pins(self.key_provider()).map_err(|e| e.to_string())
     }
 
     /// Deletes the pin for `host:port`, the only way to accept a rotated bastion key.
     pub fn delete_host_key(&mut self, host: &str, port: u32) -> Result<bool, String> {
-        let removed = tunnel::delete_host_key(host, port).map_err(|e| e.to_string())?;
+        let removed =
+            tunnel::delete_host_key(host, port, self.key_provider()).map_err(|e| e.to_string())?;
         if removed {
             self.status = format!("Deleted SSH host key pin for {host}:{port}");
         }
