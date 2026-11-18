@@ -6,8 +6,8 @@ The following versions of **Rust-SQL** currently receive security updates:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.41.x  | :white_check_mark: |
-| < 1.41  | :x:                |
+| 2.0.x   | :white_check_mark: |
+| < 2.0   | :x:                |
 
 ## Built-In Security Controls
 
