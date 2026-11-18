@@ -106,6 +106,7 @@ impl AppStore {
         let was_already_connected = !self.connections.databases.is_empty();
         self.connections.host_key_prompt = None;
         self.connections.host_key_retry_server_id = None;
+        self.db.keys = self.keys.clone();
         if let Err(err) = self
             .db
             .connect_checked(decrypted_server.clone(), Some(&target_db))
@@ -177,6 +178,7 @@ impl AppStore {
         self.connections.test_error = None;
 
         let mut test_facade = DatabaseFacade::new();
+        test_facade.keys = self.keys.clone();
         let db = server.database.clone();
         let mut res = test_facade
             .connect_checked(server, db.as_deref())

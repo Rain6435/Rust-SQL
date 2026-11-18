@@ -5,6 +5,7 @@ use super::host_keys::load_pins;
 use super::session::{open_session, ClientHandler};
 use super::{config_tunnel, TunnelConfig};
 use crate::common::types::{Server, SshHostKeyPin};
+use crate::core::keys::KeyProvider;
 use russh::client::Handle;
 use russh::Disconnect;
 use std::net::SocketAddr;
@@ -58,9 +59,16 @@ impl Drop for TunnelHandle {
 }
 
 /// Opens an SSH session for `server_info` using the stored host-key pins and starts forwarding.
-pub async fn connect_tunnel(server_info: &Server) -> Result<TunnelHandle, TunnelError> {
+///
+/// The pins are decrypted with the master key from `keys`; if it is unavailable the tunnel is
+/// refused, never opened without host-key verification.
+pub async fn connect_tunnel(
+    server_info: &Server,
+    keys: &dyn KeyProvider,
+) -> Result<TunnelHandle, TunnelError> {
     let cfg = config_tunnel(server_info)?;
-    connect_tunnel_with_pins(&cfg, load_pins()?).await
+    let pins = load_pins(keys)?;
+    connect_tunnel_with_pins(&cfg, pins).await
 }
 
 /// Opens an SSH session for `cfg`, verifying the host key against `pins`, and starts forwarding.

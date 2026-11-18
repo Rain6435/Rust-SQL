@@ -133,3 +133,25 @@ fn errors_never_contain_the_plaintext() {
     let err = decrypt(&enc, &key(2), "c", "password").unwrap_err();
     assert!(!err.to_string().contains("very-secret-value"));
 }
+
+#[test]
+fn purposes_use_separate_subkeys_and_associated_data() {
+    let k = key(3);
+    let pins = encrypt_for(Purpose::HOST_KEY_PINS, "[]", &k, "r", "f").unwrap();
+    assert_eq!(
+        decrypt_for(Purpose::HOST_KEY_PINS, &pins, &k, "r", "f")
+            .unwrap()
+            .to_string(),
+        "[]"
+    );
+    assert_eq!(
+        decrypt(&pins, &k, "r", "f").unwrap_err(),
+        CryptoError::AuthenticationFailed
+    );
+    let cred = encrypt("[]", &k, "r", "f").unwrap();
+    assert_eq!(
+        decrypt_for(Purpose::HOST_KEY_PINS, &cred, &k, "r", "f").unwrap_err(),
+        CryptoError::AuthenticationFailed
+    );
+    assert_ne!(CREDENTIAL_KEY_INFO, HOST_KEY_PINS_KEY_INFO);
+}
