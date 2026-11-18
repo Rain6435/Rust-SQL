@@ -77,6 +77,13 @@ pub struct BaseConfig {
     /// Opt-in: emulate dialects that have no live driver (results are not from a real server).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub emulate_unsupported_dialects: Option<bool>,
+    /// Opt-in: also keep the query with parameter values filled in (display only) in history.
+    /// Off by default, so history keeps only the query with its placeholders.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_store_bound_values: Option<bool>,
+    /// Rows fetched per page of query results (more are fetched on demand).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_page_size: Option<u32>,
 }
 
 /// On-disk schema of `rust-sql.json`, containing the server list and optional user preferences.
@@ -95,6 +102,11 @@ pub struct ConfigFile {
     /// Multi-user web server settings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub web: Option<super::WebConfig>,
+}
+
+/// Default number of rows fetched per result page.
+pub fn default_result_page_size() -> u32 {
+    crate::adapters::DEFAULT_LIMIT
 }
 
 /// Repository metadata attached to the runtime configuration.
@@ -130,6 +142,12 @@ pub struct Config {
     /// Whether dialects without a live driver may be emulated (off unless explicitly enabled).
     #[serde(default)]
     pub emulate_unsupported_dialects: bool,
+    /// Whether history also keeps parameter values (display-only bound SQL). Off by default.
+    #[serde(default)]
+    pub history_store_bound_values: bool,
+    /// Rows fetched per page of query results.
+    #[serde(default = "default_result_page_size")]
+    pub result_page_size: u32,
     /// Whether servers are displayed in list mode.
     pub connections_as_list: bool,
     /// Active custom font family.
@@ -171,6 +189,8 @@ impl Default for Config {
             disabled_open_animation: false,
             csv_delimiter: ",".to_string(),
             emulate_unsupported_dialects: false,
+            history_store_bound_values: false,
+            result_page_size: default_result_page_size(),
             connections_as_list: false,
             custom_font: "Lato".to_string(),
             name: "Rust-SQL".to_string(),

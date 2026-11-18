@@ -9,6 +9,7 @@ pub mod crypto;
 pub mod errors;
 pub mod export;
 pub mod filters;
+pub mod history;
 pub mod keys;
 pub mod params;
 pub mod result_ops;

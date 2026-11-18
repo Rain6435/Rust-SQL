@@ -182,6 +182,12 @@ pub fn save_settings_sync(settings: &BaseConfig) -> Result<(), String> {
     if settings.custom_font.is_some() {
         full.base.custom_font = settings.custom_font.clone();
     }
+    if settings.history_store_bound_values.is_some() {
+        full.base.history_store_bound_values = settings.history_store_bound_values;
+    }
+    if settings.result_page_size.is_some() {
+        full.base.result_page_size = settings.result_page_size;
+    }
     save_sync(&full)
 }
 

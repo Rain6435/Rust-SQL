@@ -188,8 +188,9 @@ impl AppStore {
             .as_ref()
             .map(|s| s.client.clone())
             .unwrap_or_default();
-        let display_sql =
-            (!params.is_empty()).then(|| bind_for_display(query_text, &params, &client));
+        let policy = self.history_policy();
+        let display_sql = (!params.is_empty() && policy.store_bound_values)
+            .then(|| bind_for_display(query_text, &params, &client));
 
         let start = Instant::now();
         if let Some(q) = self.queries.queries_by_id.get_mut(&query_id) {
@@ -198,7 +199,9 @@ impl AppStore {
             q.is_default_select = is_default_select;
             q.did_invalidate = false;
             q.execution_time = None;
-            q.query_history.push(query_text.to_string());
+            if !policy.excluded {
+                q.query_history.push(query_text.to_string());
+            }
         }
         self.status = "Executing query...".to_string();
 
@@ -223,9 +226,14 @@ impl AppStore {
         match exec_res {
             Ok(results) => {
                 let total_rows: usize = results.iter().map(|r| r.rows.len()).sum();
-                self.bookmark_manager
-                    .record_history(&db_name, query_text, elapsed_ms, total_rows, None);
-                self.bookmark_manager.set_latest_display_sql(display_sql);
+                self.record_execution(
+                    policy,
+                    &db_name,
+                    query_text,
+                    display_sql,
+                    elapsed_ms,
+                    Ok(total_rows),
+                );
                 if let Some(q) = self.queries.queries_by_id.get_mut(&query_id) {
                     q.error = None;
                     q.is_executing = false;
@@ -243,14 +251,14 @@ impl AppStore {
                 Ok(results)
             }
             Err(err) => {
-                self.bookmark_manager.record_history(
+                self.record_execution(
+                    policy,
                     &db_name,
                     query_text,
+                    display_sql,
                     elapsed_ms,
-                    0,
-                    Some(err.clone()),
+                    Err(err.clone()),
                 );
-                self.bookmark_manager.set_latest_display_sql(display_sql);
                 if let Some(q) = self.queries.queries_by_id.get_mut(&query_id) {
                     q.results = None;
                     q.is_executing = false;

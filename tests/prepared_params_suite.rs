@@ -156,6 +156,13 @@ async fn store_executes_typed_inputs_and_records_display_only_history() {
         .connect(&saved.id, None, false, None)
         .await
         .expect("connect");
+    // Display-only bound SQL is kept only with the history opt-in.
+    store
+        .config
+        .data
+        .as_mut()
+        .unwrap()
+        .history_store_bound_values = true;
 
     let input = |kind, text: &str| ParamInput {
         kind,
