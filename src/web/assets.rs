@@ -13,11 +13,14 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <title>Rust-SQL</title>
+  <link rel="icon" type="image/png" href="/logo.png" />
   <style>
     * { box-sizing: border-box; font-family: 'Lato', 'Helvetica Neue', Arial, sans-serif; }
     body { margin: 0; background: #f8fafc; color: #0f172a; display: flex; flex-direction: column; height: 100vh; }
     body.dark-theme { background: #0f172a; color: #f8fafc; }
     header { height: 50px; background: #1e293b; color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; }
+    .brand { display: flex; align-items: center; gap: 8px; }
+    .brand img { width: 28px; height: 28px; border-radius: 4px; }
     footer { height: 32px; background: #e2e8f0; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 12px; }
     #main-area { flex: 1; display: flex; overflow: hidden; }
     #server-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; padding: 16px; width: 100%; align-content: start; }
@@ -36,7 +39,7 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
 </head>
 <body>
   <header>
-    <div><strong>Rust-SQL</strong></div>
+    <div class="brand"><img src="/logo.png" alt="Rust-SQL logo" /><strong>Rust-SQL</strong></div>
     <div id="breadcrumb">servers</div>
     <div id="conn-actions"><span id="whoami"></span> <button id="logout-btn" hidden>Sign out</button></div>
   </header>

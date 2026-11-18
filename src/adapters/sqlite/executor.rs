@@ -82,11 +82,7 @@ pub fn execute_sqlite_statement_with_params(
         })
     } else {
         let mut stmt = conn.prepare(stmt_text).map_err(map_sqlite_err)?;
-        let col_names: Vec<String> = stmt
-            .column_names()
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect();
+        let col_names: Vec<String> = stmt.column_names().map(|s| s.to_string()).collect();
         let mut rows_out = Vec::new();
 
         let mut rows = stmt

@@ -35,11 +35,11 @@ This project and everyone participating in it is governed by our [Code of Conduc
 
 ## Prerequisites
 
-- **Rust**: Stable toolchain (`1.80+`, recommended via [rustup](https://rustup.rs/)).
+- **Rust**: Stable toolchain (`1.89+`, recommended via [rustup](https://rustup.rs/)).
 - **System Libraries (Linux)**:
   ```bash
   sudo apt-get update && sudo apt-get install -y \
-    pkg-config libssl-dev libsqlite3-dev \
+    pkg-config libssl-dev \
     libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
     libxkbcommon-dev libxkbcommon-x11-dev libgtk-3-dev \
     libgl1-mesa-dev libegl1-mesa-dev libfontconfig1-dev libfreetype-dev

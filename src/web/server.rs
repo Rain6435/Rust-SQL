@@ -129,6 +129,8 @@ async fn serve_ipc(
     (status, Json(resp)).into_response()
 }
 
+const RUST_SQL_LOGO_PNG: &[u8] = include_bytes!("../../assets/logo.png");
+
 async fn handle_index() -> Html<&'static str> {
     Html(RUST_SQL_WEB_HTML)
 }
@@ -139,6 +141,10 @@ async fn handle_editor_js() -> Response {
         RUST_SQL_WEB_EDITOR_JS,
     )
         .into_response()
+}
+
+async fn handle_logo() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "image/png")], RUST_SQL_LOGO_PNG)
 }
 
 async fn handle_health() -> Json<Value> {
@@ -153,6 +159,7 @@ async fn handle_health() -> Json<Value> {
 pub fn build_web_router(app: Arc<WebApp>) -> Router {
     Router::new()
         .route("/", get(handle_index))
+        .route("/logo.png", get(handle_logo))
         .route("/api/health", get(handle_health))
         .route("/api/login", post(handle_login))
         .route("/api/logout", post(handle_logout))
