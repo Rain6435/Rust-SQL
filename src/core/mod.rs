@@ -3,6 +3,7 @@
 
 pub mod appdb;
 pub mod bookmarks;
+pub mod completion;
 pub mod config;
 pub mod connection_string;
 pub mod crypto;

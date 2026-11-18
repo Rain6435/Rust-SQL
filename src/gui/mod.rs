@@ -1,5 +1,6 @@
 //! Native cross-platform Desktop GUI powered by `eframe` / `egui`.
 
+pub mod completion;
 pub mod header_footer;
 pub mod modal_host_keys;
 pub mod modal_import;
@@ -114,6 +115,8 @@ pub struct RustSqlGuiApp {
     pub update_modal_state: Option<Result<UpdateCheckResult, String>>,
     /// Message displayed after an in-app self-update attempt.
     pub update_apply_message: Option<Result<String, String>>,
+    /// Autocomplete suggestions shown under the SQL editor.
+    pub completion: Option<crate::core::completion::Completions>,
     /// Data import modal state, while the modal is open.
     pub import_modal: Option<modal_import::ImportModalState>,
 }
@@ -163,6 +166,7 @@ impl RustSqlGuiApp {
             update_modal_state: None,
             update_apply_message: None,
             import_modal: None,
+            completion: None,
         }
     }
 

@@ -1,6 +1,7 @@
 //! Application state store (`AppStore`) combining all state slices, database session facade,
 //! query bookmarks/audit history, read-only guardrail mode, and runtime query parameters.
 
+pub mod completion;
 pub mod config_servers;
 pub mod connections;
 pub mod history;
