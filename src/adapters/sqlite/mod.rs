@@ -4,7 +4,10 @@ pub mod connection;
 pub mod executor;
 
 pub use connection::open_sqlite;
-pub use executor::{execute_sqlite_statement, map_sqlite_err, SqliteCancellableQuery};
+pub use executor::{
+    execute_sqlite_statement, execute_sqlite_statement_with_params, map_sqlite_err,
+    SqliteCancellableQuery,
+};
 
 use crate::adapters::{
     build_query_select_top, wrap_identifier_for_adapter, CancellableQuery, DatabaseAdapter,
@@ -15,6 +18,7 @@ use crate::common::types::{
 };
 use crate::common::utils::append_semi_colon;
 use crate::core::errors::DbCoreError;
+use crate::core::params::QueryParams;
 use crate::core::sql_identifier::identify;
 use async_trait::async_trait;
 use rusqlite::Connection;
@@ -188,18 +192,27 @@ impl DatabaseAdapter for SqliteAdapter {
         Ok(Vec::new())
     }
 
-    fn query(&self, query_text: &str) -> Result<Arc<dyn CancellableQuery>, DbCoreError> {
+    fn query_with_params(
+        &self,
+        query_text: &str,
+        params: &QueryParams,
+    ) -> Result<Arc<dyn CancellableQuery>, DbCoreError> {
         Ok(Arc::new(SqliteCancellableQuery {
             shared_conn: self.shared_conn.clone(),
             db_path: self.db_path.clone(),
             read_only: self.read_only.clone(),
             query_text: query_text.to_string(),
+            params: params.clone(),
             interrupt_handle: Mutex::new(None),
             canceled: AtomicBool::new(false),
         }))
     }
 
-    async fn execute_query(&self, query_text: &str) -> Result<Vec<QueryRowResult>, DbCoreError> {
+    async fn execute_query_with_params(
+        &self,
+        query_text: &str,
+        params: &QueryParams,
+    ) -> Result<Vec<QueryRowResult>, DbCoreError> {
         let statements = identify(query_text, false).unwrap_or_default();
         if statements.is_empty() {
             return Ok(Vec::new());
@@ -208,7 +221,13 @@ impl DatabaseAdapter for SqliteAdapter {
             statements
                 .into_iter()
                 .map(|s| {
-                    execute_sqlite_statement(conn, &s.text, s.statement_type, s.execution_type)
+                    execute_sqlite_statement_with_params(
+                        conn,
+                        &s.text,
+                        s.statement_type,
+                        s.execution_type,
+                        params,
+                    )
                 })
                 .collect()
         })

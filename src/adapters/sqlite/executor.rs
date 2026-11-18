@@ -4,12 +4,28 @@ use crate::adapters::sqlite::connection::open_sqlite;
 use crate::adapters::CancellableQuery;
 use crate::common::types::{FieldInfo, QueryRowResult};
 use crate::core::errors::{CanceledByUserError, DbCoreError};
+use crate::core::params::{prepare_statement, ParamValue, PlaceholderStyle, QueryParams};
 use crate::core::sql_identifier::{identify, ExecutionType, StatementKind};
 use async_trait::async_trait;
-use rusqlite::{types::ValueRef, Connection, InterruptHandle};
+use rusqlite::types::{ToSqlOutput, ValueRef};
+use rusqlite::{params_from_iter, Connection, InterruptHandle, ToSql};
 use serde_json::{Map, Number, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+
+impl ToSql for ParamValue {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(match self {
+            ParamValue::Null => ToSqlOutput::Owned(rusqlite::types::Value::Null),
+            ParamValue::Bool(b) => {
+                ToSqlOutput::Owned(rusqlite::types::Value::Integer(i64::from(*b)))
+            }
+            ParamValue::Int(i) => ToSqlOutput::Owned(rusqlite::types::Value::Integer(*i)),
+            ParamValue::Float(f) => ToSqlOutput::Owned(rusqlite::types::Value::Real(*f)),
+            ParamValue::Text(s) => ToSqlOutput::Borrowed(ValueRef::Text(s.as_bytes())),
+        })
+    }
+}
 
 /// Executes a single SQL statement against a `rusqlite::Connection` and constructs a [`QueryRowResult`].
 pub fn execute_sqlite_statement(
@@ -18,6 +34,33 @@ pub fn execute_sqlite_statement(
     stmt_type: StatementKind,
     exec_type: ExecutionType,
 ) -> Result<QueryRowResult, DbCoreError> {
+    execute_sqlite_statement_with_params(conn, stmt_text, stmt_type, exec_type, &QueryParams::new())
+}
+
+/// Executes one statement as a prepared statement with `params` bound as typed SQLite values.
+///
+/// Placeholders are rewritten to `?N` and the values are bound through `rusqlite`; they are
+/// never written into the SQL text. With no parameters, the statement runs as written.
+pub fn execute_sqlite_statement_with_params(
+    conn: &Connection,
+    stmt_text: &str,
+    stmt_type: StatementKind,
+    exec_type: ExecutionType,
+    params: &QueryParams,
+) -> Result<QueryRowResult, DbCoreError> {
+    let prepared = if params.is_empty() {
+        None
+    } else {
+        Some(prepare_statement(
+            stmt_text,
+            params,
+            PlaceholderStyle::Question,
+        )?)
+    };
+    let (stmt_text, values) = match &prepared {
+        Some(p) => (p.sql.as_str(), p.values.as_slice()),
+        None => (stmt_text, &[][..]),
+    };
     let is_mod = exec_type == ExecutionType::Modification
         && !matches!(
             stmt_type,
@@ -25,7 +68,9 @@ pub fn execute_sqlite_statement(
         );
 
     if is_mod {
-        let changes = conn.execute(stmt_text, []).map_err(map_sqlite_err)?;
+        let changes = conn
+            .execute(stmt_text, params_from_iter(values.iter()))
+            .map_err(map_sqlite_err)?;
         Ok(QueryRowResult {
             command: stmt_type.to_string(),
             rows: Vec::new(),
@@ -42,7 +87,9 @@ pub fn execute_sqlite_statement(
             .collect();
         let mut rows_out = Vec::new();
 
-        let mut rows = stmt.query([]).map_err(map_sqlite_err)?;
+        let mut rows = stmt
+            .query(params_from_iter(values.iter()))
+            .map_err(map_sqlite_err)?;
         while let Some(row) = rows.next().map_err(map_sqlite_err)? {
             let mut map = Map::new();
             for (idx, col_name) in col_names.iter().enumerate() {
@@ -109,6 +156,8 @@ pub struct SqliteCancellableQuery {
     pub read_only: Arc<AtomicBool>,
     /// SQL script to execute.
     pub query_text: String,
+    /// Values for the script's placeholders, bound through prepared statements.
+    pub params: QueryParams,
     /// Native SQLite interrupt handle populated when execution begins.
     pub interrupt_handle: Mutex<Option<InterruptHandle>>,
     /// Atomic flag tracking whether [`cancel`](CancellableQuery::cancel) has been invoked.
@@ -149,11 +198,12 @@ impl CancellableQuery for SqliteCancellableQuery {
             if self.canceled.load(Ordering::SeqCst) {
                 return Err(DbCoreError::CanceledByUser(CanceledByUserError::new()));
             }
-            results.push(execute_sqlite_statement(
+            results.push(execute_sqlite_statement_with_params(
                 conn,
                 &stmt.text,
                 stmt.statement_type,
                 stmt.execution_type,
+                &self.params,
             )?);
         }
         Ok(results)

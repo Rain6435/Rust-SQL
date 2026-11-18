@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Query parameters are bound through prepared statements instead of pasted into the SQL.**
+  - SQLite, the emulator, PostgreSQL, and Redshift bind `:name`, `@name`, and `$1` values through
+    the driver. A value containing `'`, `\`, or `--` can no longer change the statement.
+  - Placeholders inside `--` and `/* */` comments are no longer substituted.
+  - Parameters keep their type (Text, Number, Boolean, NULL) from the GUI, terminal UI, and web
+    UI to the server. Before, every value was sent as a string and re-read as a number if it
+    looked like one, so a ZIP code like `02134` became `2134`.
+  - The terminal UI and web UI can now set parameter values. Web: `DB_EXECUTE_QUERY` and
+    `DB_CREATE_CANCELLABLE_QUERY` take an optional JSON object of values.
+  - A placeholder with no value is now an error naming it.
+  - History stores the query with placeholders; the copy with values filled in is labeled
+    "display only, not executed".
 - **Read-Only mode and the destructive-query check can no longer be bypassed, and fail closed.**
   - Statements are parsed with `sqlparser` in the connection's dialect instead of scanned for a
     `WHERE` token. `DELETE FROM users -- WHERE id = 1` and

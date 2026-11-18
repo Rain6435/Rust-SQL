@@ -186,7 +186,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run live PostgreSQL suite
-        run: cargo test --test live_postgres_suite --test read_only_suite -- --nocapture
+        run: cargo test --test live_postgres_suite --test live_postgres_params_suite --test read_only_suite -- --nocapture
 
   docs:
     name: Rustdoc Check

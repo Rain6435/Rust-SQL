@@ -22,6 +22,7 @@ pub use slices_query::{
 use crate::adapters::DatabaseFacade;
 use crate::core::bookmarks::BookmarkManager;
 use crate::core::keys::{KeyProvider, SharedKeyProvider};
+use crate::core::params::ParamInput;
 use std::collections::HashMap;
 
 /// Complete application store combining all state slices and the [`DatabaseFacade`].
@@ -61,8 +62,9 @@ pub struct AppStore {
     pub read_only_mode: bool,
     /// Persistent SQL bookmarks and execution audit history manager.
     pub bookmark_manager: BookmarkManager,
-    /// Runtime `:param` / `$param` / `{{param}}` parameter bindings for SQL execution.
-    pub query_params: HashMap<String, String>,
+    /// Typed values for the `:param` / `@param` / `$1` placeholders in the editor, bound
+    /// through prepared statements at execution.
+    pub query_params: HashMap<String, ParamInput>,
     /// Source of the master key for saved passwords (the OS keychain in production).
     pub keys: SharedKeyProvider,
 }

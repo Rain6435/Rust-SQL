@@ -99,8 +99,12 @@ and must be entered again.
    - **Enforced by the database too.** In Read-Only mode the session itself is read-only: PostgreSQL and Redshift run `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`, SQLite files are opened with `SQLITE_OPEN_READ_ONLY`, and in-memory SQLite and the emulator use `PRAGMA query_only`. If the database refuses, the query is not run. The analyzer is a guardrail; the session setting is the backstop for things it cannot see, such as functions with side effects.
    - **Destructive Query Detection (`analyze_script`)**: flags `DELETE`/`UPDATE` without a top-level `WHERE`, `DROP TABLE`/`SCHEMA`/`DATABASE`, `TRUNCATE`, and any statement that cannot be parsed as `Critical`, and asks for confirmation before running them. It fails closed: an unparseable script is never reported as safe.
    - Read-Only mode is available in the desktop GUI and the headless CLI. The terminal UI and web UI do not have a Read-Only mode yet.
-2. **Parameterized Queries ([src/core/params.rs](src/core/params.rs))**:
-   - Automatically detects `:named`, `@named`, and `$1` positional bind variables in SQL queries and renders inline parameter inputs in the GUI (`extract_query_parameters`, `bind_query_parameters`) with safe SQL literal escaping.
+2. **Parameterized Queries ([src/core/params/](src/core/params/mod.rs))**:
+   - Detects `:named`, `@named`, and `$1` placeholders outside string literals, quoted identifiers, and `--` / `/* */` comments (`extract_query_parameters`).
+   - **Values are sent through the driver's prepared statements, never pasted into the SQL.** SQLite (and the emulator) binds them with `rusqlite`; PostgreSQL and Redshift prepare the statement with `$1`, `$2`, ... and bind typed values. Every adapter must implement `query_with_params` / `execute_query_with_params`.
+   - **Types are kept.** Each parameter is Text, Number, Boolean, or NULL: a type picker in the desktop GUI, <kbd>Tab</kbd> into the parameter list and <kbd>Ctrl</kbd>-<kbd>T</kbd> in the terminal UI, and a JSON object (`{"id": 5, "name": "x"}`) in the web UI. Text is never re-read as a number.
+   - A placeholder with no value is an error that names it. On PostgreSQL, a parameterized query returns typed values (numbers, booleans, JSON; `numeric`, dates, and times as text); a result column of another type, such as `inet`, is an error asking you to cast it to text.
+   - History stores the query with its placeholders, so Replay binds the values again. The history panel also shows a copy with the values filled in, labeled `-- display only, not executed` (`bind_for_display`); it is never run.
 3. **Saved SQL Bookmarks & Searchable Execution History ([src/core/bookmarks.rs](src/core/bookmarks.rs))**:
    - Save, tag, search, and insert reusable SQL snippets (`SqlBookmark`).
    - Full execution history audit trail (`QueryHistoryEntry`) recording database, SQL, duration (`ms`), row count, and status with one-click replay.

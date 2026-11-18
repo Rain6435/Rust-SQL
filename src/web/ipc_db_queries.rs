@@ -1,5 +1,8 @@
 //! Web IPC handlers for query execution, script generation, and exports.
 //!
+//! `DB_EXECUTE_QUERY` and `DB_CREATE_CANCELLABLE_QUERY` take an optional JSON object of typed
+//! parameter values, bound through the driver's prepared statements.
+//!
 //! Every event that touches the open connection re-checks the caller's grant. Statement
 //! execution is audited without the query text. Events that read or write the server's file
 //! system or change process-wide limits require an administrator, and exports never touch
@@ -9,7 +12,7 @@ use crate::common::event::*;
 use crate::core::export::export_query_result_to_string;
 use crate::web::ipc_policy::{QUERY_ADMIN_EVENTS, QUERY_CONNECTION_EVENTS};
 use crate::web::query_audit::{audit_query_results, audit_statement};
-use crate::web::{str_arg, IpcCtx, IpcResponse};
+use crate::web::{params_arg, str_arg, IpcCtx, IpcResponse};
 use serde_json::{Map, Value};
 
 fn db_table_schema(args: &[Value]) -> (String, String, Option<String>) {
@@ -44,8 +47,13 @@ pub async fn handle_db_queries_ipc(
             let database = str_arg(args, 0).unwrap_or_default();
             let query_id = args.get(1).and_then(|v| v.as_u64()).unwrap_or(1);
             let query_text = str_arg(args, 2).unwrap_or_default();
+            let params = match params_arg(args, 3) {
+                Ok(p) => p,
+                Err(r) => return Some(r),
+            };
             let mut db = state.db.lock().await;
-            match db.create_cancellable_query(&database, query_id, &query_text) {
+            match db.create_cancellable_query_with_params(&database, query_id, &query_text, &params)
+            {
                 Ok(()) => IpcResponse::success(Value::Null),
                 Err(e) => IpcResponse::err(e),
             }
@@ -71,8 +79,14 @@ pub async fn handle_db_queries_ipc(
         DB_EXECUTE_QUERY => {
             let database = str_arg(args, 0).unwrap_or_default();
             let query_text = str_arg(args, 1).unwrap_or_default();
+            let params = match params_arg(args, 2) {
+                Ok(p) => p,
+                Err(r) => return Some(r),
+            };
             let db = state.db.lock().await;
-            let result = db.execute_query(&database, &query_text).await;
+            let result = db
+                .execute_query_with_params(&database, &query_text, &params)
+                .await;
             audit_query_results(ctx, &conn_id, &result);
             match result {
                 Ok(res) => IpcResponse::success(res),

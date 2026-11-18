@@ -1,6 +1,6 @@
 //! Multi-tab SQL query bar, code editor, inline parameter binding inputs, and action toolbar.
 
-use crate::core::params::extract_query_parameters;
+use crate::core::params::{extract_query_parameters, ParamKind};
 use crate::gui::RustSqlGuiApp;
 use eframe::egui::{self, FontId, Key, RichText};
 
@@ -104,8 +104,28 @@ impl RustSqlGuiApp {
                 ui.label(RichText::new("🔧 Params:").strong());
                 for p_name in detected_params {
                     ui.label(format!("{p_name} ="));
-                    let entry = self.store.query_params.entry(p_name).or_default();
-                    ui.add(egui::TextEdit::singleline(entry).desired_width(100.0));
+                    let entry = self.store.query_params.entry(p_name.clone()).or_default();
+                    egui::ComboBox::from_id_salt(("param_kind", &p_name))
+                        .width(80.0)
+                        .selected_text(entry.kind.label())
+                        .show_ui(ui, |ui| {
+                            for kind in ParamKind::ALL {
+                                ui.selectable_value(&mut entry.kind, kind, kind.label());
+                            }
+                        });
+                    match entry.kind {
+                        ParamKind::Null => {}
+                        ParamKind::Boolean => {
+                            let mut on = entry.text.eq_ignore_ascii_case("true");
+                            ui.checkbox(&mut on, "");
+                            entry.text = on.to_string();
+                        }
+                        ParamKind::Text | ParamKind::Number => {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut entry.text).desired_width(100.0),
+                            );
+                        }
+                    }
                 }
             });
         }

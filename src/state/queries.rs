@@ -1,10 +1,8 @@
 //! SQL query tab management, parameter binding, and query execution actions on [`AppStore`].
 
 use crate::common::types::QueryRowResult;
-use crate::core::params::bind_query_parameters;
+use crate::core::params::{bind_for_display, extract_query_parameters, QueryParams};
 use crate::state::{AppStore, QueryTab};
-use serde_json::Value;
-use std::collections::HashMap;
 use std::time::Instant;
 
 impl AppStore {
@@ -126,6 +124,20 @@ impl AppStore {
         current.copied = Some(false);
     }
 
+    /// Typed values for the placeholders in `query_text`, taken from [`AppStore::query_params`].
+    ///
+    /// Inputs for parameters the query does not use are ignored. A placeholder with no input
+    /// is left for the driver layer, which reports it by name.
+    pub fn params_for_query(&self, query_text: &str) -> Result<QueryParams, String> {
+        extract_query_parameters(query_text)
+            .into_iter()
+            .filter_map(|name| {
+                let input = self.query_params.get(&name)?;
+                Some(input.to_value(&name).map(|v| (name, v)))
+            })
+            .collect()
+    }
+
     /// Executes `query_text` in the active tab, recording audit history and invalidating affected DDL slices.
     pub async fn execute_query_if_needed(
         &mut self,
@@ -160,16 +172,24 @@ impl AppStore {
             return Err(reason);
         }
 
-        let bound_query = if self.query_params.is_empty() {
-            query_text.to_string()
-        } else {
-            let param_vals: HashMap<String, Value> = self
-                .query_params
-                .iter()
-                .map(|(k, v)| (k.clone(), Value::String(v.clone())))
-                .collect();
-            bind_query_parameters(query_text, &param_vals)
+        let params = match self.params_for_query(query_text) {
+            Ok(p) => p,
+            Err(reason) => {
+                if let Some(q) = self.queries.queries_by_id.get_mut(&query_id) {
+                    q.results = None;
+                    q.error = Some(reason.clone());
+                }
+                return Err(reason);
+            }
         };
+        let client = self
+            .connections
+            .server
+            .as_ref()
+            .map(|s| s.client.clone())
+            .unwrap_or_default();
+        let display_sql =
+            (!params.is_empty()).then(|| bind_for_display(query_text, &params, &client));
 
         let start = Instant::now();
         if let Some(q) = self.queries.queries_by_id.get_mut(&query_id) {
@@ -178,7 +198,7 @@ impl AppStore {
             q.is_default_select = is_default_select;
             q.did_invalidate = false;
             q.execution_time = None;
-            q.query_history.push(bound_query.clone());
+            q.query_history.push(query_text.to_string());
         }
         self.status = "Executing query...".to_string();
 
@@ -189,10 +209,12 @@ impl AppStore {
             .any(|f| f == "cancelQuery");
         let exec_res = if can_cancel {
             self.db
-                .create_cancellable_query(&db_name, query_id, &bound_query)?;
+                .create_cancellable_query_with_params(&db_name, query_id, query_text, &params)?;
             self.db.execute_cancellable_query(query_id).await
         } else {
-            self.db.execute_query(&db_name, &bound_query).await
+            self.db
+                .execute_query_with_params(&db_name, query_text, &params)
+                .await
         };
 
         let elapsed_ms = start.elapsed().as_millis() as u64;
@@ -201,13 +223,9 @@ impl AppStore {
         match exec_res {
             Ok(results) => {
                 let total_rows: usize = results.iter().map(|r| r.rows.len()).sum();
-                self.bookmark_manager.record_history(
-                    &db_name,
-                    &bound_query,
-                    elapsed_ms,
-                    total_rows,
-                    None,
-                );
+                self.bookmark_manager
+                    .record_history(&db_name, query_text, elapsed_ms, total_rows, None);
+                self.bookmark_manager.set_latest_display_sql(display_sql);
                 if let Some(q) = self.queries.queries_by_id.get_mut(&query_id) {
                     q.error = None;
                     q.is_executing = false;
@@ -227,11 +245,12 @@ impl AppStore {
             Err(err) => {
                 self.bookmark_manager.record_history(
                     &db_name,
-                    &bound_query,
+                    query_text,
                     elapsed_ms,
                     0,
                     Some(err.clone()),
                 );
+                self.bookmark_manager.set_latest_display_sql(display_sql);
                 if let Some(q) = self.queries.queries_by_id.get_mut(&query_id) {
                     q.results = None;
                     q.is_executing = false;

@@ -18,7 +18,10 @@ impl TuiApp {
         {
             self.db_focus = match self.db_focus {
                 DatabaseFocus::TableList => DatabaseFocus::QueryArea,
-                DatabaseFocus::QueryArea => DatabaseFocus::QueryResults,
+                DatabaseFocus::QueryArea if !self.query_param_names().is_empty() => {
+                    DatabaseFocus::Params
+                }
+                DatabaseFocus::QueryArea | DatabaseFocus::Params => DatabaseFocus::QueryResults,
                 DatabaseFocus::QueryResults => DatabaseFocus::TableList,
             };
             return;
@@ -117,6 +120,7 @@ impl TuiApp {
                     _ => {}
                 }
             }
+            DatabaseFocus::Params => self.handle_params_key(key, rt),
             DatabaseFocus::QueryResults => match key.code {
                 KeyCode::Esc => self.db_focus = DatabaseFocus::TableList,
                 KeyCode::Char('q') => self.should_quit = true,

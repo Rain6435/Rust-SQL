@@ -7,6 +7,7 @@ use rust_sql::common::types::{Password, Server, SslConfig};
 use rust_sql::core::appdb::AppDb;
 use rust_sql::core::config::{self, set_config_path_override};
 use rust_sql::core::keys::{InMemoryKeyProvider, SharedKeyProvider};
+use rust_sql::core::params::{ParamInput, ParamKind};
 use rust_sql::core::servers;
 use rust_sql::gui::{ServerFormDraft, SettingsFormDraft};
 use rust_sql::state::{AppStore, DbObjectType, ScriptActionType};
@@ -121,9 +122,13 @@ async fn test_servers_crud_state_store_ipc_and_tui() {
     assert!(blocked.is_err());
     store.read_only_mode = false;
 
-    store
-        .query_params
-        .insert("target_info".to_string(), "Ipsum 1".to_string());
+    store.query_params.insert(
+        "target_info".to_string(),
+        ParamInput {
+            kind: ParamKind::Text,
+            text: "Ipsum 1".to_string(),
+        },
+    );
     let param_res = store
         .execute_query_if_needed("SELECT * FROM document WHERE info = :target_info;", false)
         .await
@@ -189,6 +194,7 @@ fn test_tui_navigation() {
         selected_table_idx: 0,
         selected_db_idx: 0,
         db_focus: DatabaseFocus::TableList,
+        selected_param_idx: 0,
         form_draft: ServerFormDraft::from_server(None),
         form_field_idx: 0,
         should_quit: false,

@@ -6,9 +6,12 @@
 
 pub mod executor;
 pub mod live_pg;
+pub mod live_pg_decode;
 pub mod live_pg_metadata;
+pub mod live_pg_params;
 pub mod live_pg_query;
 pub mod metadata;
+pub mod query_dispatch;
 pub mod scripts;
 pub mod seed;
 pub mod sql_templates;
@@ -16,6 +19,7 @@ pub mod sql_templates;
 pub use executor::{execute_dialect_query_internal, DialectCancellableQuery};
 pub use live_pg::{connect_live_postgres, LivePostgres};
 pub use live_pg_metadata::*;
+pub use live_pg_params::execute_live_query_with_params;
 pub use live_pg_query::{execute_live_query, PgCancellableQuery};
 pub use metadata::*;
 pub use scripts::*;
@@ -33,10 +37,10 @@ use crate::common::types::{
     ListTableResult, ListViewResult, QueryRowResult, SchemaFilter, TableKeysResult,
 };
 use crate::core::errors::DbCoreError;
+use crate::core::params::QueryParams;
 use async_trait::async_trait;
 use scripts::ScriptKind;
 use seed::Backend;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 #[async_trait]
@@ -186,37 +190,20 @@ impl DatabaseAdapter for DialectAdapter {
         }
     }
 
-    fn query(&self, query_text: &str) -> Result<Arc<dyn CancellableQuery>, DbCoreError> {
-        if self.adapter_key == "cassandra" {
-            return Err(DbCoreError::CassandraCancelUnsupported);
-        }
-        let canceled = Arc::new(AtomicBool::new(false));
-        Ok(match self.backend()? {
-            Backend::Live(client) => Arc::new(PgCancellableQuery {
-                client: client.clone(),
-                query_text: query_text.to_string(),
-                canceled,
-            }),
-            Backend::Emulated(e) => Arc::new(DialectCancellableQuery {
-                adapter_key: self.adapter_key.clone(),
-                emulated_conn: e.clone(),
-                extra_databases: self.extra_databases.clone(),
-                query_text: query_text.to_string(),
-                canceled,
-            }),
-        })
+    fn query_with_params(
+        &self,
+        query_text: &str,
+        params: &QueryParams,
+    ) -> Result<Arc<dyn CancellableQuery>, DbCoreError> {
+        self.cancellable_query(query_text, params)
     }
 
-    async fn execute_query(&self, query_text: &str) -> Result<Vec<QueryRowResult>, DbCoreError> {
-        match self.backend()? {
-            Backend::Live(c) => execute_live_query(c, query_text).await,
-            Backend::Emulated(e) => execute_dialect_query_internal(
-                &self.adapter_key,
-                e,
-                &self.extra_databases,
-                query_text,
-            ),
-        }
+    async fn execute_query_with_params(
+        &self,
+        query_text: &str,
+        params: &QueryParams,
+    ) -> Result<Vec<QueryRowResult>, DbCoreError> {
+        self.run_query(query_text, params).await
     }
 
     async fn get_query_select_top(
