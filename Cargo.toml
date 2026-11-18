@@ -34,7 +34,7 @@ url = "2.5"
 dirs = "7.0"
 log = "0.4"
 env_logger = "0.11"
-rusqlite = { version = "0.32", features = ["column_decltype"] }
+rusqlite = { version = "0.43", features = ["bundled", "column_decltype"] }
 tokio-postgres = { version = "0.7", features = ["with-time-0_3", "with-serde_json-1", "with-uuid-1"] }
 bytes = "1"
 ratatui = "0.30"

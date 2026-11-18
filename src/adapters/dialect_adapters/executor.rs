@@ -183,7 +183,6 @@ pub fn execute_dialect_query_internal(
                 if let Ok(prepared) = conn.prepare(&stmt.text) {
                     res.fields = prepared
                         .column_names()
-                        .into_iter()
                         .map(|n| FieldInfo {
                             name: n.to_string(),
                         })

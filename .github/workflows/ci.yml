@@ -44,7 +44,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             pkg-config \
             libssl-dev \
-            libsqlite3-dev \
             libxcb-render0-dev \
             libxcb-shape0-dev \
             libxcb-xfixes0-dev \
@@ -85,7 +84,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             pkg-config \
             libssl-dev \
-            libsqlite3-dev \
             libxcb-render0-dev \
             libxcb-shape0-dev \
             libxcb-xfixes0-dev \
@@ -96,20 +94,6 @@ jobs:
             libegl1-mesa-dev \
             libfontconfig1-dev \
             libfreetype-dev
-
-      - name: Install SQLite on macOS
-        if: matrix.os == 'macos-latest'
-        run: brew install sqlite3
-
-      - name: Install SQLite on Windows
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          vcpkg install sqlite3:x64-windows
-          $vcpkgInstalled = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
-          echo "SQLITE3_LIB_DIR=$vcpkgInstalled\lib" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "SQLITE3_INCLUDE_DIR=$vcpkgInstalled\include" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "$vcpkgInstalled\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -167,7 +151,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             pkg-config \
             libssl-dev \
-            libsqlite3-dev \
             libxcb-render0-dev \
             libxcb-shape0-dev \
             libxcb-xfixes0-dev \
@@ -255,7 +238,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             pkg-config \
             libssl-dev \
-            libsqlite3-dev \
             libxcb-render0-dev \
             libxcb-shape0-dev \
             libxcb-xfixes0-dev \
@@ -300,7 +282,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             pkg-config \
             libssl-dev \
-            libsqlite3-dev \
             libxcb-render0-dev \
             libxcb-shape0-dev \
             libxcb-xfixes0-dev \
@@ -334,7 +315,6 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             pkg-config \
             libssl-dev \
-            libsqlite3-dev \
             libxcb-render0-dev \
             libxcb-shape0-dev \
             libxcb-xfixes0-dev \

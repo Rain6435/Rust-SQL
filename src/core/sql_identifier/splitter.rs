@@ -43,7 +43,7 @@ pub fn split_sql_statements(sql: &str) -> Vec<(usize, usize, &str)> {
             continue;
         }
         if let Some(tag) = dollar_tag {
-            if sql[i..].starts_with(tag) {
+            if bytes[i..].starts_with(tag.as_bytes()) {
                 dollar_tag = None;
                 i += tag.len();
                 continue;

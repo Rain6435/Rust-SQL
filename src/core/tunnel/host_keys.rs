@@ -1,7 +1,7 @@
 //! Trust-on-first-use host-key verification with a 180-day re-confirmation timer.
 //!
-//! Pins live in the `sshHostKeys` list of the configuration store. That store is not encrypted
-//! yet; Workstream 4 moves it into the encrypted store. Every approval and deletion is written
+//! Pins live in the `sshHostKeys` list of the configuration store, which is not encrypted (see
+//! `docs/security/threat-model.md`, "Known gaps"). Every approval and deletion is written
 //! to the `audit_events` table of the application database; if that write fails, the call
 //! returns an error.
 
