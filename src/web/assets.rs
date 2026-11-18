@@ -45,6 +45,7 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
   </div>
   <footer>
     <span id="status-bar">Ready</span>
+    <span id="timeout-label" data-testid="statement-timeout"></span>
     <span>Rust-SQL v1.39.0</span>
   </footer>
   <script>
@@ -74,6 +75,8 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
     let emulatedBanner = null;
 
     function setConnectionMode(info) {
+      const secs = info && info.statementTimeoutSecs;
+      document.getElementById('timeout-label').textContent = info ? (secs ? `Timeout: ${secs}s` : 'Timeout: none') : '';
       emulatedBanner = info && info.mode === 'emulated' ? info.banner : null;
       const el = document.getElementById('emulated-banner');
       el.textContent = emulatedBanner || '';

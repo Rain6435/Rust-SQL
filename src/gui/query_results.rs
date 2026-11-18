@@ -32,7 +32,8 @@ impl RustSqlGuiApp {
         }
         if query_tab.is_executing {
             ui.centered_and_justified(|ui| {
-                ui.label(RichText::new("⏳ Executing query...").size(16.0));
+                let timeout = self.store.statement_timeout_label().unwrap_or_default();
+                ui.label(RichText::new(format!("⏳ Executing query... {timeout}")).size(16.0));
             });
             return;
         }

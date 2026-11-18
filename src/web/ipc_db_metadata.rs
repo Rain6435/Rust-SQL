@@ -11,12 +11,19 @@ use crate::core::servers;
 use crate::web::{str_arg, IpcCtx, IpcResponse};
 use serde_json::{json, Value};
 
-/// Builds the `{ mode, banner }` payload so web clients can show the EMULATED warning.
+/// Builds the `{ mode, banner, statementTimeoutSecs }` payload so web clients can show the
+/// EMULATED warning and the connection's statement timeout.
 fn mode_response(db: &DatabaseFacade, database: &str) -> IpcResponse {
+    let timeout = db
+        .server_session
+        .as_ref()
+        .and_then(|s| s.config.statement_timeout_secs)
+        .filter(|s| *s > 0);
     match db.connection_mode(database) {
         Ok(mode) => IpcResponse::success(json!({
             "mode": mode,
             "banner": (mode == ConnectionMode::Emulated).then_some(EMULATED_BANNER),
+            "statementTimeoutSecs": timeout,
         })),
         Err(e) => IpcResponse::err(e),
     }

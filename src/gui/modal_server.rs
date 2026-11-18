@@ -166,6 +166,19 @@ impl RustSqlGuiApp {
         });
 
         ui.horizontal(|ui| {
+            ui.label("Statement timeout (s):")
+                .on_hover_text("Empty or 0 = no timeout");
+            ui.add(
+                egui::TextEdit::singleline(&mut self.server_draft.statement_timeout_secs)
+                    .desired_width(60.0),
+            );
+            ui.checkbox(
+                &mut self.server_draft.exclude_from_history,
+                "Exclude from query history",
+            );
+        });
+
+        ui.horizontal(|ui| {
             ui.label("Connection URI:");
             let resp = ui.add_enabled(
                 self.server_draft.show_plain_password,

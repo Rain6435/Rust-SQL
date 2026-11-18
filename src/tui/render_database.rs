@@ -88,7 +88,10 @@ impl TuiApp {
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(query_border_style)
-                .title(" Query "),
+                .title(match self.store.statement_timeout_label() {
+                    Some(t) => format!(" Query ({t}) "),
+                    None => " Query ".to_string(),
+                }),
         );
         f.render_widget(query_box, r_chunks[0]);
 

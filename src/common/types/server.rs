@@ -204,6 +204,34 @@ pub struct Server {
     /// Optional sidebar filter rules for databases and schemas.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter: Option<ServerFilter>,
+    /// Per-statement timeout in seconds. `None` or `0` means no timeout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub statement_timeout_secs: Option<u32>,
+    /// When `true`, queries run on this connection are never written to query history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exclude_from_history: Option<bool>,
+}
+
+impl Server {
+    /// The configured per-statement timeout, or `None` when there is no timeout.
+    pub fn statement_timeout(&self) -> Option<std::time::Duration> {
+        self.statement_timeout_secs
+            .filter(|s| *s > 0)
+            .map(|s| std::time::Duration::from_secs(u64::from(s)))
+    }
+
+    /// Short label for the UI, such as `"Timeout: 30s"` or `"Timeout: none"`.
+    pub fn statement_timeout_label(&self) -> String {
+        match self.statement_timeout_secs.filter(|s| *s > 0) {
+            Some(s) => format!("Timeout: {s}s"),
+            None => "Timeout: none".to_string(),
+        }
+    }
+
+    /// Whether queries on this connection are kept out of query history.
+    pub fn is_excluded_from_history(&self) -> bool {
+        self.exclude_from_history == Some(true)
+    }
 }
 
 /// Map of field paths (e.g., `"host"`, `"ssh.user"`) to human-readable validation error messages.

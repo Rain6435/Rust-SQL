@@ -60,6 +60,10 @@ pub struct ServerFormDraft {
     pub filter_schema_only: String,
     /// Newline-separated list of excluded schemas.
     pub filter_schema_ignore: String,
+    /// Per-statement timeout in seconds (empty or `0` = none).
+    pub statement_timeout_secs: String,
+    /// Whether queries on this connection are kept out of query history.
+    pub exclude_from_history: bool,
 }
 
 impl ServerFormDraft {
@@ -170,6 +174,11 @@ impl ServerFormDraft {
             filter_db_ignore: db_ignore,
             filter_schema_only: schema_only,
             filter_schema_ignore: schema_ignore,
+            statement_timeout_secs: s
+                .statement_timeout_secs
+                .map(|t| t.to_string())
+                .unwrap_or_default(),
+            exclude_from_history: s.is_excluded_from_history(),
         };
         draft.conn_uri = build_connection_uri(&draft.to_server(), false);
         draft

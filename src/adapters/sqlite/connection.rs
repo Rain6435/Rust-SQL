@@ -4,6 +4,7 @@
 //! rejects writes. An in-memory database cannot be reopened without losing its contents, so it
 //! uses `PRAGMA query_only = ON` instead.
 
+use crate::adapters::sqlite::timeout::apply_busy_timeout;
 use crate::adapters::sqlite::{map_sqlite_err, SqliteAdapter};
 use crate::core::errors::DbCoreError;
 use rusqlite::{Connection, OpenFlags};
@@ -43,10 +44,9 @@ impl SqliteAdapter {
             .lock()
             .map_err(|e| DbCoreError::Message(e.to_string()))?;
         if guard.is_none() {
-            *guard = Some(open_sqlite(
-                &self.db_path,
-                self.read_only.load(Ordering::SeqCst),
-            )?);
+            let conn = open_sqlite(&self.db_path, self.read_only.load(Ordering::SeqCst))?;
+            apply_busy_timeout(&conn, self.statement_timeout)?;
+            *guard = Some(conn);
         }
         match guard.as_ref() {
             Some(conn) => f(conn),
@@ -82,7 +82,9 @@ impl SqliteAdapter {
             Some(conn) if self.db_path == ":memory:" => set_query_only(conn, read_only),
             Some(_) => {
                 *guard = None;
-                *guard = Some(open_sqlite(&self.db_path, read_only)?);
+                let conn = open_sqlite(&self.db_path, read_only)?;
+                apply_busy_timeout(&conn, self.statement_timeout)?;
+                *guard = Some(conn);
                 Ok(())
             }
             None => Ok(()),

@@ -92,6 +92,15 @@ impl AppStore {
         self.queries.queries_by_id.get_mut(&id)
     }
 
+    /// The connected server's statement timeout as a UI label (`"Timeout: 30s"`), if connected.
+    pub fn statement_timeout_label(&self) -> Option<String> {
+        self.connections
+            .server
+            .as_ref()
+            .filter(|_| self.connections.connected)
+            .map(|s| s.statement_timeout_label())
+    }
+
     /// Returns the database name associated with the active query tab or the most recent connection.
     pub fn current_database(&self) -> Option<String> {
         self.current_query()
