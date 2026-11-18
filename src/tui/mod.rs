@@ -1,14 +1,19 @@
 //! Interactive Terminal User Interface (`--tui`) powered by `ratatui` and `crossterm`.
 
+pub mod completion;
 pub mod host_key;
+pub mod import;
 pub mod input_database;
 pub mod input_servers;
 pub mod params;
 pub mod render_database;
+pub mod render_import;
 pub mod render_servers;
 
+use crate::core::completion::Completions;
 use crate::gui::ServerFormDraft;
 use crate::state::AppStore;
+use crate::tui::import::TuiImport;
 use crossterm::{
     event::{self, Event},
     execute,
@@ -78,6 +83,12 @@ pub struct TuiApp {
     pub form_field_idx: usize,
     /// Whether the user has requested to exit the TUI loop.
     pub should_quit: bool,
+    /// Open import dialog (`i` on a table), if any.
+    pub import: Option<TuiImport>,
+    /// Autocomplete suggestions shown under the SQL editor, if any.
+    pub completion: Option<Completions>,
+    /// Highlighted suggestion in [`Self::completion`].
+    pub completion_idx: usize,
 }
 
 impl Default for TuiApp {
@@ -102,12 +113,17 @@ impl TuiApp {
             form_draft: ServerFormDraft::from_server(None),
             form_field_idx: 0,
             should_quit: false,
+            import: None,
+            completion: None,
+            completion_idx: 0,
         }
     }
 }
 
 /// Enters alternate-screen raw mode and runs the interactive [`TuiApp`] event loop.
-pub fn run_tui() -> Result<(), String> {
+///
+/// With `read_only` (`--read-only`), queries run in Read-Only mode and imports are refused.
+pub fn run_tui(read_only: bool) -> Result<(), String> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -120,6 +136,7 @@ pub fn run_tui() -> Result<(), String> {
     let mut terminal = Terminal::new(backend).map_err(|e| e.to_string())?;
 
     let mut app = TuiApp::new();
+    app.store.read_only_mode = read_only;
 
     loop {
         terminal

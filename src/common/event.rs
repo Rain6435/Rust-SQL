@@ -99,6 +99,12 @@ pub const DB_EXECUTE_CANCELLABLE_QUERY: &str = "DB_EXECUTE_CANCELLABLE_QUERY";
 pub const DB_EXECUTE_QUERY: &str = "DB_EXECUTE_QUERY";
 /// Execute a query, returning one page of rows when it is a single `SELECT`.
 pub const DB_EXECUTE_PAGED: &str = "DB_EXECUTE_PAGED";
+/// Parse an uploaded CSV/JSON file and preview it with a column mapping for a table.
+pub const DB_IMPORT_PREVIEW: &str = "DB_IMPORT_PREVIEW";
+/// Import an uploaded CSV/JSON file into a table (one transaction).
+pub const DB_IMPORT_RUN: &str = "DB_IMPORT_RUN";
+/// Autocomplete suggestions for the SQL editor.
+pub const DB_COMPLETE: &str = "DB_COMPLETE";
 /// Build the dialect-specific `SELECT TOP / LIMIT` query string for a table.
 pub const DB_GET_QUERY_SELECT_TOP: &str = "DB_GET_QUERY_SELECT_TOP";
 /// Generate the `CREATE TABLE` DDL script for a table.

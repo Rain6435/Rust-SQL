@@ -249,6 +249,9 @@ pub fn complete(
     }
 }
 
+#[path = "completion_apply.rs"]
+mod apply;
+
 #[cfg(test)]
 #[path = "completion_tests.rs"]
 mod tests;

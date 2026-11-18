@@ -63,15 +63,10 @@ impl RustSqlGuiApp {
         let Some(c) = self.completion.take() else {
             return;
         };
-        let chars: Vec<char> = text.chars().collect();
-        let end = (c.start + c.prefix.chars().count()).min(chars.len());
-        let start = c.start.min(end);
-        let mut new_text: String = chars[..start].iter().collect();
-        new_text.push_str(label);
-        new_text.extend(&chars[end..]);
+        let (new_text, at) = c.apply(text, label);
         self.store.update_query_if_needed(&new_text, None, None);
         if let Some(mut state) = TextEditState::load(ctx, id) {
-            let at = CCursor::new(start + label.chars().count());
+            let at = CCursor::new(at);
             state
                 .cursor
                 .set_char_range(Some(egui::text::CCursorRange::one(at)));

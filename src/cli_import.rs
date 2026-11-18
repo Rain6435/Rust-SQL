@@ -30,16 +30,6 @@ pub(crate) struct ImportArgs<'a> {
     pub trust_host_key: Option<&'a str>,
 }
 
-fn cell(v: &ParamValue) -> String {
-    match v {
-        ParamValue::Null => "NULL".into(),
-        ParamValue::Bool(b) => b.to_string(),
-        ParamValue::Int(i) => i.to_string(),
-        ParamValue::Float(f) => f.to_string(),
-        ParamValue::Text(s) => s.clone(),
-    }
-}
-
 async fn import(server: Server, args: &ImportArgs<'_>) -> Result<usize, String> {
     if args.read_only {
         return Err("Import is a write; it cannot run with --read-only".into());
@@ -57,7 +47,13 @@ async fn import(server: Server, args: &ImportArgs<'_>) -> Result<usize, String> 
         data.columns.join(", ")
     );
     for row in data.preview(PREVIEW_ROWS.min(5)) {
-        eprintln!("  {}", row.iter().map(cell).collect::<Vec<_>>().join(" | "));
+        eprintln!(
+            "  {}",
+            row.iter()
+                .map(ParamValue::display_text)
+                .collect::<Vec<_>>()
+                .join(" | ")
+        );
     }
 
     let mut session = create_server(server.clone()).map_err(|e| e.to_string())?;

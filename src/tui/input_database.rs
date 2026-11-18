@@ -13,6 +13,16 @@ impl TuiApp {
         server_id: String,
         database: String,
     ) {
+        if self.import.is_some() {
+            self.handle_import_key(key, rt, &database);
+            return;
+        }
+        if self.db_focus == DatabaseFocus::QueryArea
+            && self.handle_completion_key(key, rt, &database)
+        {
+            return;
+        }
+        self.completion = None;
         if key.code == KeyCode::Tab
             || (key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('e'))
         {
@@ -30,6 +40,7 @@ impl TuiApp {
         match self.db_focus {
             DatabaseFocus::TableList => match key.code {
                 KeyCode::Char('q') => self.should_quit = true,
+                KeyCode::Char('i') => self.open_import(rt, &database),
                 KeyCode::Char('s') => {
                     rt.block_on(self.store.disconnect());
                     self.route = TuiRoute::ServerList;
@@ -106,6 +117,7 @@ impl TuiApp {
                         if let Some(q) = self.store.current_query_mut() {
                             q.query.pop();
                         }
+                        self.refresh_completion(rt, &database, false);
                     }
                     KeyCode::Enter => {
                         if let Some(q) = self.store.current_query_mut() {
@@ -116,6 +128,7 @@ impl TuiApp {
                         if let Some(q) = self.store.current_query_mut() {
                             q.query.push(c);
                         }
+                        self.refresh_completion(rt, &database, false);
                     }
                     _ => {}
                 }

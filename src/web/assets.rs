@@ -4,7 +4,8 @@
 //! as `X-CSRF-Token` on every IPC call. It connects by saved connection ID and never sees a
 //! password. Query parameters are sent as a JSON object, so numbers, booleans, and null keep
 //! their types; the server binds them through prepared statements. Values from the server or
-//! the database are inserted as text, never as HTML.
+//! the database are inserted as text, never as HTML. Autocomplete and import live in
+//! [`crate::web::assets_editor`], loaded from `/assets/editor.js`.
 
 /// Single-page application HTML/JS bundle communicating with `/api/ipc`.
 pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
@@ -48,6 +49,7 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
     <span id="timeout-label" data-testid="statement-timeout"></span>
     <span>Rust-SQL v1.39.0</span>
   </footer>
+  <script src="/assets/editor.js"></script>
   <script>
     let csrfToken = null;
 
@@ -71,7 +73,7 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
       return json.data;
     }
 
-    window.rustSql = { ipc };
+    window.rustSql = { ipc, post };
     let emulatedBanner = null;
 
     function setConnectionMode(info) {
@@ -168,7 +170,7 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
           <div id="table-items"></div>
         </div>
         <div id="workspace" class="react-tabs__tab-panel react-tabs__tab-panel--selected">
-          <div id="querybox1"><div contenteditable="true" id="editor-box" style="border:1px solid #ccc;padding:8px;min-height:80px;font-family:monospace"></div></div>
+          <div id="querybox1"><textarea id="editor-box" class="query-editor" data-testid="query-editor" spellcheck="false"></textarea></div>
           <div><input id="params-input" data-testid="query-params" style="width:60%" placeholder='Parameters as JSON, for example {"id": 5, "name": "x"}' /> <button class="primary" id="exec-btn">Execute</button></div>
           <div id="query-result"></div>
         </div>
@@ -183,7 +185,7 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
         item.appendChild(el('span', {}, t.name));
         item.querySelector('span').onclick = async () => {
           const sql = await ipc('DB_GET_QUERY_SELECT_TOP', db, t.name);
-          document.getElementById('editor-box').innerText = sql;
+          document.getElementById('editor-box').value = sql;
           await runQuery(db, sql);
         };
         tblContainer.appendChild(item);
@@ -197,8 +199,9 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
           document.getElementById('query-result').textContent = 'Parameters must be a JSON object: ' + e.message;
           return;
         }
-        runQuery(db, document.getElementById('editor-box').innerText, params);
+        runQuery(db, document.getElementById('editor-box').value, params);
       };
+      window.rustSqlEditor.attach(db, tables);
     }
 
     function appendRows(wrap, r) {

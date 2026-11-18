@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Autocomplete in the desktop GUI editor**: tables, columns of referenced tables (aliases
   resolved), and keywords, live or on <kbd>Ctrl</kbd>-<kbd>Space</kbd>. The existing Auto Complete
   settings now do something; before, no completion engine existed.
+- **Import and autocomplete in the terminal and web UIs**, sharing the desktop code. Terminal UI:
+  <kbd>i</kbd> on a table opens an import dialog; suggestions appear under the editor (live or
+  <kbd>Ctrl</kbd>-<kbd>Space</kbd>, <kbd>Tab</kbd> inserts). Web UI: `Import…` panel and an
+  autocomplete list under the editor (a `<textarea>` now). New IPC events `DB_IMPORT_PREVIEW`,
+  `DB_IMPORT_RUN`, `DB_COMPLETE` (grant required); `/api/ipc/import` takes import bodies up to
+  16 MiB with the same session and CSRF checks. Imports are audited.
+- **`--tui --read-only`** runs the terminal UI in Read-Only mode (queries and imports).
 - **Live database CI job** that starts PostgreSQL, MySQL, and MariaDB and fails if any returns
   emulated results when a live connection was requested.
 

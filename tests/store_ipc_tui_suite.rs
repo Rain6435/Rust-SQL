@@ -198,6 +198,9 @@ fn test_tui_navigation() {
         form_draft: ServerFormDraft::from_server(None),
         form_field_idx: 0,
         should_quit: false,
+        import: None,
+        completion: None,
+        completion_idx: 0,
     };
     assert_eq!(tui.route, TuiRoute::ServerList);
     let rt = tokio::runtime::Builder::new_current_thread()
