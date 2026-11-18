@@ -23,8 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   settings now do something; before, no completion engine existed.
 - **Live database CI job** that starts PostgreSQL, MySQL, and MariaDB and fails if any returns
   emulated results when a live connection was requested.
+- **Threat model** in [`docs/security/threat-model.md`](docs/security/threat-model.md): the web
+  server's accounts and sessions, the keychain dependency, SSH host-key handling and its 180-day
+  timer, what the audit log records and omits, the emulation opt-in, and known gaps.
 
 ### Changed
+- **SQLite is now built into Rust-SQL** (rusqlite 0.43 with the `bundled` feature, SQLite 3.54)
+  instead of linked from the system. Building from source no longer needs `libsqlite3-dev`,
+  Homebrew `sqlite3`, or vcpkg, and the Docker image no longer installs `libsqlite3-0`.
 - **Query history no longer keeps parameter values by default.** It keeps the query with its
   placeholders; turn on "Keep parameter values in history" (`historyStoreBoundValues`) to also keep
   the display-only copy. A connection marked "Exclude from query history" records nothing.
@@ -122,6 +128,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   emulator, the fabricated PostgreSQL `EXPLAIN` plan, and placeholder `let _ = (...)` blocks.
 - `try_connect_live_postgres` (replaced by `connect_live_postgres`, which returns an error
   instead of `None`).
+
+### Fixed
+- A script containing a PostgreSQL dollar-quoted body with non-ASCII text, such as
+  `SELECT $$é$$;`, crashed the statement splitter (and with it running, analyzing, and paging the
+  script) instead of running.
+
+### Security
+- Upgraded `rusqlite` 0.32 to 0.43 and bundled SQLite 3.54.1 to fix RUSTSEC-2026-0459
+  (CVE-2026-119375): SQLite before 3.54.0 could return uninitialized memory when opening a
+  database file with a crafted `-wal` file. The advisory is no longer ignored in `deny.toml` or the
+  audit workflow.
 
 ## [1.41.1] - 2026-11-17
 

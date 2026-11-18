@@ -6,8 +6,8 @@ The following versions of **Rust-SQL** currently receive security updates:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.39.x  | :white_check_mark: |
-| < 1.39  | :x:                |
+| 1.41.x  | :white_check_mark: |
+| < 1.41  | :x:                |
 
 ## Built-In Security Controls
 
@@ -21,8 +21,12 @@ The following versions of **Rust-SQL** currently receive security updates:
    - **Read-Only Mode** (`--read-only` or `🔒 Read-Only` in the desktop GUI) runs only statements positively recognized as read-only. Anything else, including statements the analyzer does not recognize, is treated as a modification and blocked.
    - Read-Only Mode is also enforced by the database session where supported: PostgreSQL/Redshift read-only transactions, SQLite `SQLITE_OPEN_READ_ONLY` (files) or `PRAGMA query_only` (in-memory and emulated). If the session cannot be made read-only, nothing runs.
    - `DELETE` and `UPDATE` without a top-level `WHERE` (a `WHERE` in a comment or a subquery does not count), `DROP TABLE`/`SCHEMA`/`DATABASE`, and `TRUNCATE` require confirmation.
-3. **Safe Parameter Binding (`src/core/params.rs`)**:
-   - Named (`:param`, `@param`) and positional (`$1`) bind variables escape string literals to prevent accidental SQL injection during interactive query testing.
+3. **Prepared-Statement Parameter Binding (`src/core/params/`)**:
+   - Named (`:param`, `@param`) and positional (`$1`) parameters are sent through the driver's prepared-statement API with their type (text, number, boolean, `NULL`), never pasted into the SQL text. The copy with values filled in, shown in history, is labeled "display only, not executed".
+4. **Web Server Accounts, Sessions, and TLS (`src/web/`, `src/core/appdb/`)**: see [docs/app/web-server.md](docs/app/web-server.md).
+5. **SSH Tunnels with Pinned Host Keys (`src/core/tunnel/`)**: trust on first use with a 180-day re-confirmation timer; a changed key is refused.
+
+The [threat model](docs/security/threat-model.md) describes what these controls protect against, what they do not, and the known gaps.
 
 ## Reporting a Vulnerability
 
