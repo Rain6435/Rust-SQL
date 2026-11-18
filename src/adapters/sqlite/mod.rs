@@ -20,7 +20,6 @@ use crate::common::types::{
 use crate::common::utils::append_semi_colon;
 use crate::core::errors::DbCoreError;
 use crate::core::params::QueryParams;
-use crate::core::sql_identifier::identify;
 use async_trait::async_trait;
 use rusqlite::Connection;
 use std::sync::atomic::AtomicBool;
@@ -219,27 +218,7 @@ impl DatabaseAdapter for SqliteAdapter {
         query_text: &str,
         params: &QueryParams,
     ) -> Result<Vec<QueryRowResult>, DbCoreError> {
-        let statements = identify(query_text, false).unwrap_or_default();
-        if statements.is_empty() {
-            return Ok(Vec::new());
-        }
-        let limit = self.statement_timeout;
-        self.open_or_with_conn(|conn| {
-            statements
-                .into_iter()
-                .map(|s| {
-                    timeout::run_with_timeout(conn, limit, |c| {
-                        execute_sqlite_statement_with_params(
-                            c,
-                            &s.text,
-                            s.statement_type,
-                            s.execution_type,
-                            params,
-                        )
-                    })
-                })
-                .collect()
-        })
+        self.run_script(query_text, params)
     }
 
     async fn get_query_select_top(

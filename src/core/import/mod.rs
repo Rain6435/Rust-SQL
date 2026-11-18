@@ -1,6 +1,6 @@
 //! Data import from CSV and JSON files into an existing table.
 //!
-//! The flow is: [`parse`] a file into an [`ImportData`], show a [`ImportData::preview`], map
+//! The flow is: [`parse()`] a file into an [`ImportData`], show a [`ImportData::preview`], map
 //! source columns to the target table's columns ([`auto_map`], editable by the user), then
 //! [`run_import`]. Every row is inserted through a prepared statement (values are bound, never
 //! written into the SQL), all inside one transaction: a failing row rolls back the whole import.
