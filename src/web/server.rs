@@ -2,14 +2,19 @@
 //!
 //! Guards applied to every route: `Host` allowlist (421 otherwise), 1 MiB body limit (413),
 //! and security headers. `/api/ipc` additionally requires a session (401), a CSRF token (403),
-//! and a free slot in the session's concurrency cap (429).
+//! and a free slot in the session's concurrency cap (429). `/api/ipc/import` has the same
+//! guards and a 16 MiB body limit, and accepts only the import events.
 
 use crate::core::appdb::AppDb;
 use crate::core::keys::system_key_provider;
+use crate::web::assets_editor::RUST_SQL_WEB_EDITOR_JS;
 use crate::web::auth::{
     authenticate, error_response, handle_login, handle_logout, handle_session, source_ip,
 };
-use crate::web::settings::{WebLaunchOptions, WebSettings, BODY_LIMIT_BYTES};
+use crate::web::ipc_db_import::IMPORT_EVENTS;
+use crate::web::settings::{
+    WebLaunchOptions, WebSettings, BODY_LIMIT_BYTES, IMPORT_BODY_LIMIT_BYTES,
+};
 use crate::web::state::{IpcCtx, WebApp};
 use crate::web::{dispatch_ipc_event, IpcRequest, RUST_SQL_WEB_HTML};
 use axum::body::Bytes;
@@ -68,7 +73,28 @@ async fn handle_ipc(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let auth = match authenticate(&app, &headers, true) {
+    serve_ipc(&app, addr, &headers, &body, None).await
+}
+
+async fn handle_ipc_import(
+    State(app): State<Arc<WebApp>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    serve_ipc(&app, addr, &headers, &body, Some(IMPORT_EVENTS)).await
+}
+
+/// Authenticates (session and CSRF), applies the concurrency cap, and dispatches. With `only`,
+/// any other event is refused.
+async fn serve_ipc(
+    app: &WebApp,
+    addr: SocketAddr,
+    headers: &HeaderMap,
+    body: &[u8],
+    only: Option<&[&str]>,
+) -> Response {
+    let auth = match authenticate(app, headers, true) {
         Ok(a) => a,
         Err(resp) => return *resp,
     };
@@ -78,12 +104,18 @@ async fn handle_ipc(
             "Too many concurrent requests for this session",
         );
     };
-    let req: IpcRequest = match serde_json::from_slice(&body) {
+    let req: IpcRequest = match serde_json::from_slice(body) {
         Ok(r) => r,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e.to_string()),
     };
+    if only.is_some_and(|events| !events.contains(&req.event.as_str())) {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "This endpoint accepts imports only",
+        );
+    }
     let ctx = IpcCtx {
-        app: &app,
+        app,
         session: &auth.state,
         user: &auth.info.user,
         source_ip: Some(source_ip(&addr)),
@@ -101,6 +133,14 @@ const RUST_SQL_LOGO_PNG: &[u8] = include_bytes!("../../assets/logo.png");
 
 async fn handle_index() -> Html<&'static str> {
     Html(RUST_SQL_WEB_HTML)
+}
+
+async fn handle_editor_js() -> Response {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        RUST_SQL_WEB_EDITOR_JS,
+    )
+        .into_response()
 }
 
 async fn handle_logo() -> impl IntoResponse {
@@ -124,7 +164,12 @@ pub fn build_web_router(app: Arc<WebApp>) -> Router {
         .route("/api/login", post(handle_login))
         .route("/api/logout", post(handle_logout))
         .route("/api/session", get(handle_session))
+        .route("/assets/editor.js", get(handle_editor_js))
         .route("/api/ipc", post(handle_ipc))
+        .route(
+            "/api/ipc/import",
+            post(handle_ipc_import).layer(DefaultBodyLimit::max(IMPORT_BODY_LIMIT_BYTES)),
+        )
         .layer(DefaultBodyLimit::max(BODY_LIMIT_BYTES))
         .layer(middleware::from_fn_with_state(
             app.clone(),

@@ -159,7 +159,7 @@ fn main() {
     };
 
     if want_tui {
-        if let Err(e) = run_tui() {
+        if let Err(e) = run_tui(read_only) {
             eprintln!("TUI error: {e}");
             std::process::exit(1);
         }
@@ -187,7 +187,7 @@ fn main() {
             eprintln!("Desktop GUI error: {e}");
             std::process::exit(1);
         }
-    } else if let Err(e) = run_tui() {
+    } else if let Err(e) = run_tui(read_only) {
         log::warn!("TUI fallback failed ({e}), starting the Web server");
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()

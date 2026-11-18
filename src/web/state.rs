@@ -6,7 +6,7 @@
 //! grant on each request, so revoking a grant takes effect immediately.
 
 use crate::adapters::DatabaseFacade;
-use crate::common::types::HostKeyChallenge;
+use crate::common::types::{HostKeyChallenge, ListTableResult};
 use crate::core::appdb::{AppDb, AuditActor, AuditEvent, AuditKind, User};
 use crate::core::keys::KeyProvider;
 use crate::web::rate_limit::LoginLimiter;
@@ -26,6 +26,17 @@ pub struct WebIpcState {
     pub connected_server: StdMutex<Option<String>>,
     /// Concurrency cap for this session's IPC requests.
     pub permits: Arc<Semaphore>,
+    /// Autocomplete metadata per database (cleared when the connection changes).
+    pub completion: StdMutex<HashMap<String, CompletionCache>>,
+}
+
+/// Tables and loaded columns of one database, for autocomplete.
+#[derive(Debug, Clone, Default)]
+pub struct CompletionCache {
+    /// Tables and views.
+    pub tables: Vec<ListTableResult>,
+    /// Column names by table name.
+    pub columns: HashMap<String, Vec<String>>,
 }
 
 impl WebIpcState {
@@ -36,6 +47,7 @@ impl WebIpcState {
             pending_host_keys: Mutex::new(Vec::new()),
             connected_server: StdMutex::new(None),
             permits: Arc::new(Semaphore::new(max_concurrent)),
+            completion: StdMutex::new(HashMap::new()),
         }
     }
 
@@ -49,6 +61,10 @@ impl WebIpcState {
 
     /// Records (or clears) the connected saved connection ID.
     pub fn set_connected_server(&self, id: Option<String>) {
+        self.completion
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         *self
             .connected_server
             .lock()

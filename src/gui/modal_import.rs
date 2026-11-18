@@ -6,7 +6,8 @@
 
 use crate::common::types::ListTableResult;
 use crate::core::import::{
-    auto_map, parse, ColumnMapping, ImportData, ImportRequest, PREVIEW_ROWS,
+    mapping_slots, mappings_from_slots, parse, ColumnMapping, ImportData, ImportRequest,
+    PREVIEW_ROWS,
 };
 use crate::core::params::ParamValue;
 use crate::gui::RustSqlGuiApp;
@@ -36,22 +37,11 @@ pub struct ImportModalState {
 impl ImportModalState {
     fn remap(&mut self) {
         let Some(data) = &self.data else { return };
-        let auto = auto_map(&data.columns, &self.target_columns);
-        self.mapping = (0..data.columns.len())
-            .map(|i| {
-                auto.iter()
-                    .find(|m| m.source == i)
-                    .map(|m| m.target.clone())
-            })
-            .collect();
+        self.mapping = mapping_slots(&data.columns, &self.target_columns);
     }
 
     fn mappings(&self) -> Vec<ColumnMapping> {
-        self.mapping
-            .iter()
-            .enumerate()
-            .filter_map(|(i, t)| t.clone().map(|target| ColumnMapping { source: i, target }))
-            .collect()
+        mappings_from_slots(&self.mapping)
     }
 }
 

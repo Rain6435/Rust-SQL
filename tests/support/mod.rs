@@ -4,6 +4,7 @@
 
 #![allow(dead_code)]
 
+pub mod editor;
 pub mod fake_pg;
 
 use axum::body::Body;
@@ -162,8 +163,20 @@ pub async fn ipc_http(
     event: &str,
     args: Vec<Value>,
 ) -> Resp {
+    ipc_http_at(router, "/api/ipc", cookie, csrf, event, args).await
+}
+
+/// Calls an IPC endpoint at `path` with the given cookie and CSRF header.
+pub async fn ipc_http_at(
+    router: &Router,
+    path: &str,
+    cookie: Option<&str>,
+    csrf: Option<&str>,
+    event: &str,
+    args: Vec<Value>,
+) -> Resp {
     let body = json!({ "event": event, "args": args });
-    let mut b = post("/api/ipc");
+    let mut b = post(path);
     if let Some(c) = cookie {
         b = b.header(header::COOKIE, c);
     }

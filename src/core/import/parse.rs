@@ -41,15 +41,22 @@ impl ImportFormat {
 
 /// Reads and parses the file at `path`. `delimiter` applies to CSV (`.tsv` uses a tab).
 pub fn parse(path: &Path, delimiter: u8) -> Result<ImportData, String> {
-    let format = ImportFormat::from_path(path)?;
+    ImportFormat::from_path(path)?;
     let text = std::fs::read_to_string(path)
         .map_err(|e| format!("Could not read {}: {e}", path.display()))?;
+    parse_named(&path.to_string_lossy(), &text, delimiter)
+}
+
+/// Parses `text` read from a file called `name` (only its extension is used, as in
+/// [`parse`]). The web UI uses this for uploaded files, which never touch the server's disk.
+pub fn parse_named(name: &str, text: &str, delimiter: u8) -> Result<ImportData, String> {
+    let path = Path::new(name);
     let is_tsv = path
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("tsv"));
-    match format {
-        ImportFormat::Csv => parse_csv(&text, if is_tsv { b'\t' } else { delimiter }),
-        ImportFormat::Json => parse_json(&text),
+    match ImportFormat::from_path(path)? {
+        ImportFormat::Csv => parse_csv(text, if is_tsv { b'\t' } else { delimiter }),
+        ImportFormat::Json => parse_json(text),
     }
 }
 
@@ -149,6 +156,15 @@ pub fn parse_json(text: &str) -> Result<ImportData, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_named_picks_the_format_from_the_name() {
+        let tsv = parse_named("up.TSV", "a\tb\n1\t2\n", b',').unwrap();
+        assert_eq!(tsv.columns, vec!["a", "b"]);
+        let json = parse_named("x.jsonl", "{\"a\": 1}\n", b',').unwrap();
+        assert_eq!(json.rows, vec![vec![ParamValue::Int(1)]]);
+        assert!(parse_named("x.exe", "", b',').is_err());
+    }
 
     #[test]
     fn csv_keeps_text_and_maps_empty_fields_to_null() {

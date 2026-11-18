@@ -68,11 +68,15 @@ impl TuiApp {
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(tbl_border_style)
-                .title(if emulated {
-                    format!(" Tables ({database}) [EMULATED] ")
-                } else {
-                    format!(" Tables ({database}) ")
-                }),
+                .title(format!(
+                    " Tables ({database}){}{} ",
+                    if emulated { " [EMULATED]" } else { "" },
+                    if self.store.read_only_mode {
+                        " [READ-ONLY]"
+                    } else {
+                        ""
+                    }
+                )),
         );
         f.render_widget(tbl_list, h_chunks[0]);
 
@@ -178,10 +182,10 @@ impl TuiApp {
 
         let shortcut_text = match self.db_focus {
             DatabaseFocus::TableList => {
-                " [Enter] Select  [c] Change database  [s] List servers  [Tab/C-e] Editor  [q] Quit"
+                " [Enter] Select  [i] Import  [c] Change database  [s] Servers  [Tab/C-e] Editor  [q] Quit"
             }
             DatabaseFocus::QueryArea => {
-                " [C-x/F5] Execute  [C-u] Clear  [Tab/C-e] Switch Focus  [Esc] Table List"
+                " [C-x/F5] Execute  [C-Space] Complete  [C-u] Clear  [Tab/C-e] Switch Focus  [Esc] Tables"
             }
             DatabaseFocus::Params => {
                 " [Up/Down] Parameter  [C-t] Type  [C-x/F5] Execute  [Tab] Results  [Esc] Editor"
@@ -194,6 +198,10 @@ impl TuiApp {
             Paragraph::new(shortcut_text).style(Style::default().fg(Color::Cyan)),
             footer,
         );
+        if self.db_focus == DatabaseFocus::QueryArea {
+            self.render_completion(f, r_chunks[0]);
+        }
+        self.render_import(f, area);
     }
 }
 

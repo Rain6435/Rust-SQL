@@ -38,6 +38,28 @@ pub enum ParamValue {
 pub type QueryParams = HashMap<String, ParamValue>;
 
 impl ParamValue {
+    /// The value as JSON (`Null` -> `null`; a non-finite float, which never occurs, -> `null`).
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Null => Value::Null,
+            Self::Bool(b) => Value::Bool(*b),
+            Self::Int(i) => Value::from(*i),
+            Self::Float(f) => serde_json::Number::from_f64(*f).map_or(Value::Null, Value::Number),
+            Self::Text(s) => Value::String(s.clone()),
+        }
+    }
+
+    /// The value as shown in previews (`NULL` for null).
+    pub fn display_text(&self) -> String {
+        match self {
+            Self::Null => "NULL".into(),
+            Self::Bool(b) => b.to_string(),
+            Self::Int(i) => i.to_string(),
+            Self::Float(f) => f.to_string(),
+            Self::Text(s) => s.clone(),
+        }
+    }
+
     /// Converts a JSON value, as sent by the web front end, keeping its JSON type.
     ///
     /// Strings stay text even when they look numeric. Arrays, objects, and integers outside

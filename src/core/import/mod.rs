@@ -9,7 +9,7 @@
 pub mod parse;
 pub mod run;
 
-pub use parse::{parse, parse_csv, parse_json, ImportFormat};
+pub use parse::{parse, parse_csv, parse_json, parse_named, ImportFormat};
 pub use run::{run_import, ImportReport, ImportRequest};
 
 use crate::adapters::wrap_identifier_for_adapter;
@@ -66,6 +66,28 @@ pub fn auto_map(source: &[String], target: &[String]) -> Vec<ColumnMapping> {
                     target: t.clone(),
                 })
         })
+        .collect()
+}
+
+/// The [`auto_map`] result as one slot per source column (`None` = skip), the editable form
+/// the import screens show.
+pub fn mapping_slots(source: &[String], target: &[String]) -> Vec<Option<String>> {
+    let auto = auto_map(source, target);
+    (0..source.len())
+        .map(|i| {
+            auto.iter()
+                .find(|m| m.source == i)
+                .map(|m| m.target.clone())
+        })
+        .collect()
+}
+
+/// The mappings for per-source-column slots (skipped slots are left out).
+pub fn mappings_from_slots(slots: &[Option<String>]) -> Vec<ColumnMapping> {
+    slots
+        .iter()
+        .enumerate()
+        .filter_map(|(i, t)| t.clone().map(|target| ColumnMapping { source: i, target }))
         .collect()
 }
 
@@ -146,6 +168,17 @@ mod tests {
         let p = row_params(&row, &m);
         assert_eq!(p["c0"], ParamValue::Text("a@b.c".into()));
         assert_eq!(p["c1"], ParamValue::Int(7));
+    }
+
+    #[test]
+    fn slots_round_trip_to_mappings() {
+        let src = vec!["Id".to_string(), "x".to_string(), "NAME".to_string()];
+        let tgt = vec!["id".to_string(), "name".to_string()];
+        let slots = mapping_slots(&src, &tgt);
+        assert_eq!(slots, vec![Some("id".into()), None, Some("name".into())]);
+        let m = mappings_from_slots(&slots);
+        assert_eq!(m.len(), 2);
+        assert_eq!((m[1].source, m[1].target.as_str()), (2, "name"));
     }
 
     #[test]

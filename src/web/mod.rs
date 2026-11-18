@@ -6,9 +6,12 @@
 //! travel to or from clients, and no response contains a saved password.
 
 pub mod assets;
+pub mod assets_editor;
 pub mod auth;
 pub mod ipc_admin;
 pub mod ipc_config_servers;
+pub mod ipc_db_complete;
+pub mod ipc_db_import;
 pub mod ipc_db_metadata;
 pub mod ipc_db_paging;
 pub mod ipc_db_queries;
@@ -138,6 +141,12 @@ pub async fn dispatch_ipc_event(ctx: &IpcCtx<'_>, req: IpcRequest) -> IpcRespons
         return resp;
     }
     if let Some(resp) = ipc_db_queries::handle_db_queries_ipc(ctx, event, args).await {
+        return resp;
+    }
+    if let Some(resp) = ipc_db_import::handle_import_ipc(ctx, event, args).await {
+        return resp;
+    }
+    if let Some(resp) = ipc_db_complete::handle_complete_ipc(ctx, event, args).await {
         return resp;
     }
     if event == crate::common::event::DB_EXECUTE_PAGED {

@@ -18,6 +18,8 @@ pub const DEFAULT_SESSION_TTL_HOURS: u64 = 12;
 pub const DEFAULT_MAX_CONCURRENT: usize = 8;
 /// Request body limit (1 MiB).
 pub const BODY_LIMIT_BYTES: usize = 1024 * 1024;
+/// Request body limit for `/api/ipc/import` (16 MiB), which accepts only the import events.
+pub const IMPORT_BODY_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 
 /// Certificate and key paths for HTTPS.
 #[derive(Debug, Clone, PartialEq, Eq)]
