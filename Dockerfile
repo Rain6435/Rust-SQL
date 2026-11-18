@@ -8,7 +8,6 @@ FROM rust:1-bookworm AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libssl-dev \
-    libsqlite3-dev \
     libxcb-render0-dev \
     libxcb-shape0-dev \
     libxcb-xfixes0-dev \
@@ -34,7 +33,6 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3 \
-    libsqlite3-0 \
     libxcb1 \
     libxcb-render0 \
     libxcb-shape0 \
