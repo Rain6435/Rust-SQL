@@ -1,6 +1,6 @@
 //! Trust-on-first-use host-key verification with a 180-day re-confirmation timer.
 //!
-//! This module holds the pure decision logic. Persistence lives in [`super::pin_store`]: the pin
+//! This module holds the pure decision logic. Persistence lives in `super::pin_store`: the pin
 //! list is stored encrypted under the OS keychain master key, and every approval and deletion
 //! is written to the `audit_events` table of the application database.
 
