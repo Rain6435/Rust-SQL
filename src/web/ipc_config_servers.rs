@@ -177,7 +177,7 @@ fn save_settings(ctx: &IpcCtx<'_>, event: &str, args: &[Value]) -> IpcResponse {
     };
     let result = if event == CONFIG_SAVE {
         match serde_json::from_value::<ConfigFile>(val.clone()) {
-            Ok(parsed) if !parsed.servers.is_empty() || !parsed.ssh_host_keys.is_empty() => Err(
+            Ok(parsed) if !parsed.servers.is_empty() || parsed.ssh_host_keys.is_some() => Err(
                 "CONFIG_SAVE saves settings only; use SERVERS_* and SSH_HOST_KEY_* events"
                     .to_string(),
             ),

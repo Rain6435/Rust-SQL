@@ -48,7 +48,12 @@ pub async fn handle_ssh_host_keys_ipc(
                     "This host key was not presented by a connection attempt; connect first",
                 ));
             };
-            match tunnel::approve_host_key_audited(&challenge, &ctx.app.db, &ctx.actor()) {
+            match tunnel::approve_host_key_audited(
+                &challenge,
+                &*ctx.app.keys,
+                &ctx.app.db,
+                &ctx.actor(),
+            ) {
                 Ok(()) => {
                     pending.remove(idx);
                     IpcResponse::success(Value::Null)
@@ -56,7 +61,7 @@ pub async fn handle_ssh_host_keys_ipc(
                 Err(e) => IpcResponse::err(e.to_string()),
             }
         }
-        SSH_HOST_KEYS_LIST => match tunnel::load_pins() {
+        SSH_HOST_KEYS_LIST => match tunnel::load_pins(&*ctx.app.keys) {
             Ok(pins) => IpcResponse::success(pins),
             Err(e) => IpcResponse::err(e.to_string()),
         },
@@ -69,7 +74,13 @@ pub async fn handle_ssh_host_keys_ipc(
             let Ok(port) = u32::try_from(port) else {
                 return Some(IpcResponse::err("Invalid port"));
             };
-            match tunnel::delete_host_key_audited(&host, port, &ctx.app.db, &ctx.actor()) {
+            match tunnel::delete_host_key_audited(
+                &host,
+                port,
+                &*ctx.app.keys,
+                &ctx.app.db,
+                &ctx.actor(),
+            ) {
                 Ok(removed) => IpcResponse::success(json!({ "removed": removed })),
                 Err(e) => IpcResponse::err(e.to_string()),
             }

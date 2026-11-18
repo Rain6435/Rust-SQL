@@ -12,7 +12,7 @@ code and this document disagree, the code wins and this document is out of date.
 | Database and SSH credentials (passwords, key passphrases) | `rust-sql.json`, encrypted (`v2:` XChaCha20-Poly1305) |
 | The master key that encrypts them | OS keychain, service `rust-sql`, account `master-key:<data dir>` |
 | Web accounts, session hashes, connection grants, audit log | `rust-sql.db` (SQLite) next to `rust-sql.json` |
-| SSH host-key pins | `sshHostKeys` in `rust-sql.json`, **not encrypted** (see [Known gaps](#known-gaps)) |
+| SSH host-key pins | `sshHostKeys` in `rust-sql.json`, the whole list encrypted as one `v2:` value with its own subkey |
 | Data inside the user's databases | The databases themselves; Rust-SQL holds result pages in memory only |
 | Query text | Query history in the desktop GUI and terminal UI, in memory for the life of the process |
 
@@ -74,6 +74,9 @@ it by HKDF-SHA256 and bound to their connection ID and field name as associated 
   (typical for headless servers and containers) is unsupported.
 - **Protects:** a copied `rust-sql.json` (backup, sync folder, support bundle) without the
   keychain; swapping a ciphertext between connections or fields; silent tampering (AEAD).
+- **Separate subkeys.** Saved credentials and the SSH host-key pin list use different HKDF info
+  strings and associated-data domains, so a ciphertext from one cannot be passed off as the
+  other.
 - **Does not protect:** against malware running as the same OS user, which can usually ask the
   keychain for the key; on Linux, any process in the unlocked Secret Service session can read it.
 - **Loss of the key.** Deleting the keychain entry makes saved passwords unrecoverable. Rust-SQL
@@ -100,6 +103,20 @@ use with a 180-day re-confirmation timer.
 - **Why the timer.** Re-confirmation makes stale approvals visible and gives a periodic prompt to
   re-check the fingerprint. It does not detect anything by itself: a re-confirmation is only as
   good as the user's comparison.
+- **Pin storage.** The pin list (host, port, key algorithm, fingerprint, approval time) is
+  serialized and encrypted as one XChaCha20-Poly1305 value under a subkey of the keychain master
+  key, bound to the record `sshHostKeys` / field `pins`. Someone who can write `rust-sql.json`
+  but not read the keychain cannot add, edit, or swap a pin or reset its approval time, and a
+  copy of the file does not reveal which bastions are trusted. If the value fails to decrypt
+  (tampering, another master key) or the keychain is unavailable, tunnels are refused with an
+  error; they never fall back to unverified connections.
+- **What encryption does not stop.** Deleting `sshHostKeys` returns every bastion to the
+  first-use prompt, so the user must again compare fingerprints. Restoring an older copy of the
+  value (rollback) brings back the pins and approval times it held, including a pin deleted
+  since; there is no version counter. Malware running as the OS user can read the keychain and
+  is out of scope, as for saved passwords.
+- **No migration.** Plaintext pin lists written by earlier builds are discarded at startup, and
+  the user approves each bastion again.
 - **Legitimate key rotation** looks exactly like an attack (`HostKeyChanged`); the user deletes
   the pin, which is audited, and approves the new key.
 - Passwords, passphrases, private key material, and the agent socket path are redacted from
@@ -161,10 +178,9 @@ use does not depend on the operating system. A test fails if the linked SQLite i
 
 ## Known gaps
 
-- **SSH host-key pins are stored in plaintext** in `rust-sql.json`. The fingerprints are not
-  secret, but the file is not integrity-protected, so anyone who can write it can replace a pin.
-  That person can already change the connection's host, so this does not grant new capability to
-  the OS user, but the original requirement was for pins to live in the encrypted store.
+- **SSH host-key pins can be rolled back or deleted** by anyone who can write `rust-sql.json`
+  (see [SSH host-key handling](#ssh-host-key-handling)). They are encrypted and authenticated, so
+  they cannot be forged or edited.
 - **PostgreSQL TLS is not implemented.** Connections with SSL enabled are refused rather than
   sent unencrypted; use an SSH tunnel to reach a server over an untrusted network.
 - **Read-only mode exists only in the desktop GUI and CLI**, not in the terminal UI or the web UI.

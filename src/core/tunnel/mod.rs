@@ -3,12 +3,14 @@
 //! - [`config_tunnel`] validates a [`Server`] profile into a [`TunnelConfig`] with exactly one
 //!   authentication method (agent, then private key, then password).
 //! - [`connect_tunnel`] authenticates to the bastion, verifies its host key against the
-//!   trust-on-first-use pins in [`host_keys`], and forwards each local connection over a
+//!   trust-on-first-use pins in [`host_keys`] (stored encrypted under the OS keychain master
+//!   key), and forwards each local connection over a
 //!   `direct-tcpip` channel. It never dials the database directly.
 
 pub mod error;
 mod handle;
 pub mod host_keys;
+mod pin_store;
 mod session;
 
 pub use error::{Redactor, SshAuthMethod, TunnelError};

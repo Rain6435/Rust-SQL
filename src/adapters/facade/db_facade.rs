@@ -7,6 +7,7 @@ use crate::common::types::{
     ListTableResult, ListViewResult, SchemaFilter, Server, TableKeysResult,
 };
 use crate::core::errors::DbCoreError;
+use crate::core::keys::SharedKeyProvider;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -19,6 +20,8 @@ pub struct DatabaseFacade {
     pub cancellable_queries: HashMap<u64, Arc<dyn CancellableQuery>>,
     /// Read-Only mode for every connection in the session (see [`Self::set_read_only`]).
     pub read_only: bool,
+    /// Master-key source passed to every connection (decrypts SSH host-key pins).
+    pub keys: SharedKeyProvider,
 }
 
 impl DatabaseFacade {
@@ -63,6 +66,7 @@ impl DatabaseFacade {
         let session = self.server_session.as_mut().unwrap();
         let db_conn = session.create_connection(database);
         db_conn.read_only = self.read_only;
+        db_conn.keys = self.keys.clone();
         if let Err(err) = db_conn.connect().await {
             let db_key = ServerSession::db_key(database);
             if let Some(mut removed) = session.databases.remove(&db_key) {
