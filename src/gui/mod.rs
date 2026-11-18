@@ -2,6 +2,7 @@
 
 pub mod completion;
 pub mod header_footer;
+pub mod logo;
 pub mod modal_host_keys;
 pub mod modal_import;
 pub mod modal_server;
@@ -123,12 +124,6 @@ pub struct RustSqlGuiApp {
     pub logo_texture: Option<egui::TextureHandle>,
 }
 
-pub(crate) const APP_LOGO_PNG: &[u8] = include_bytes!("../../assets/logo.png");
-
-pub(crate) fn load_app_icon() -> Option<egui::IconData> {
-    eframe::icon_data::from_png_bytes(APP_LOGO_PNG).ok()
-}
-
 impl RustSqlGuiApp {
     /// Creates a new [`RustSqlGuiApp`] and loads persistent configuration from disk.
     pub fn new(rt: Arc<Runtime>) -> Self {
@@ -239,7 +234,7 @@ pub fn run_native_gui() -> Result<(), String> {
         .with_title("Rust-SQL")
         .with_inner_size([1200.0, 800.0])
         .with_min_inner_size([800.0, 550.0]);
-    if let Some(icon) = load_app_icon() {
+    if let Some(icon) = logo::load_app_icon() {
         viewport = viewport.with_icon(Arc::new(icon));
     }
 
@@ -254,17 +249,4 @@ pub fn run_native_gui() -> Result<(), String> {
         Box::new(move |_cc| Ok(Box::new(RustSqlGuiApp::new(rt)))),
     )
     .map_err(|e| e.to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::load_app_icon;
-
-    #[test]
-    fn app_logo_decodes_to_valid_icon_data() {
-        let icon = load_app_icon().expect("embedded assets/logo.png should decode");
-        assert_eq!(icon.width, 512);
-        assert_eq!(icon.height, 512);
-        assert_eq!(icon.rgba.len(), 512 * 512 * 4);
-    }
 }
