@@ -31,6 +31,7 @@ impl AppStore {
             is_canceling: false,
             result_items_per_page: self.queries.result_items_per_page,
             execution_time: None,
+            page: None,
         };
         self.queries.last_created_id = new_id;
         self.queries.current_query_id = Some(new_id);
@@ -205,20 +206,9 @@ impl AppStore {
         }
         self.status = "Executing query...".to_string();
 
-        let can_cancel = !self
-            .connections
-            .disabled_features
-            .iter()
-            .any(|f| f == "cancelQuery");
-        let exec_res = if can_cancel {
-            self.db
-                .create_cancellable_query_with_params(&db_name, query_id, query_text, &params)?;
-            self.db.execute_cancellable_query(query_id).await
-        } else {
-            self.db
-                .execute_query_with_params(&db_name, query_text, &params)
-                .await
-        };
+        let (exec_res, page) = self
+            .run_tab_query(&db_name, query_id, query_text, &params)
+            .await;
 
         let elapsed_ms = start.elapsed().as_millis() as u64;
         self.status.clear();
@@ -239,6 +229,7 @@ impl AppStore {
                     q.is_executing = false;
                     q.results = Some(results.clone());
                     q.execution_time = Some(elapsed_ms);
+                    q.page = page;
                 }
                 for r in &results {
                     match r.command.as_str() {
@@ -263,6 +254,7 @@ impl AppStore {
                     q.results = None;
                     q.is_executing = false;
                     q.error = Some(err.clone());
+                    q.page = None;
                 }
                 Err(err)
             }

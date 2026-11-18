@@ -124,6 +124,11 @@ impl TuiApp {
             DatabaseFocus::QueryResults => match key.code {
                 KeyCode::Esc => self.db_focus = DatabaseFocus::TableList,
                 KeyCode::Char('q') => self.should_quit = true,
+                KeyCode::Char('m') => {
+                    if let Err(e) = rt.block_on(self.store.fetch_more_rows()) {
+                        self.store.status = e;
+                    }
+                }
                 _ => {}
             },
         }

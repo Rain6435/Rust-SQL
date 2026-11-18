@@ -97,6 +97,8 @@ pub const DB_CANCEL_CANCELLABLE_QUERY: &str = "DB_CANCEL_CANCELLABLE_QUERY";
 pub const DB_EXECUTE_CANCELLABLE_QUERY: &str = "DB_EXECUTE_CANCELLABLE_QUERY";
 /// Execute one or more SQL statements directly against a database.
 pub const DB_EXECUTE_QUERY: &str = "DB_EXECUTE_QUERY";
+/// Execute a query, returning one page of rows when it is a single `SELECT`.
+pub const DB_EXECUTE_PAGED: &str = "DB_EXECUTE_PAGED";
 /// Build the dialect-specific `SELECT TOP / LIMIT` query string for a table.
 pub const DB_GET_QUERY_SELECT_TOP: &str = "DB_GET_QUERY_SELECT_TOP";
 /// Generate the `CREATE TABLE` DDL script for a table.

@@ -7,6 +7,7 @@ pub mod history;
 pub mod host_keys;
 pub mod metadata;
 pub mod metadata_table;
+pub mod paging;
 pub mod queries;
 pub mod scripts;
 pub mod slices_meta;
@@ -17,7 +18,7 @@ pub use slices_meta::{
     RoutineItem, RoutineState, SchemaState, ServerState, TableState, TriggerState, ViewState,
 };
 pub use slices_query::{
-    DbObjectType, ObjectScripts, QueryState, QueryTab, ScriptActionType, ScriptState,
+    DbObjectType, ObjectScripts, QueryState, QueryTab, ScriptActionType, ScriptState, TabPage,
 };
 
 use crate::adapters::DatabaseFacade;

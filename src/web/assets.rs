@@ -201,37 +201,52 @@ pub const RUST_SQL_WEB_HTML: &str = r#"<!DOCTYPE html>
       };
     }
 
+    function appendRows(wrap, r) {
+      for (const row of r.rows) {
+        for (const f of r.fields) {
+          const cell = el('div', { class: 'ReactVirtualized__Grid__cell' });
+          cell.innerText = row[f.name] === null ? 'NULL' : String(row[f.name]);
+          wrap.appendChild(cell);
+        }
+      }
+    }
+
+    // A single SELECT comes back one page at a time; "Load more" fetches the next page.
     async function runQuery(db, sql, params) {
-      const results = await ipc('DB_EXECUTE_QUERY', db, sql, params || null);
+      const data = await ipc('DB_EXECUTE_PAGED', db, sql, params || null, null);
       const resDiv = document.getElementById('query-result');
       resDiv.innerHTML = '';
       if (emulatedBanner) {
-        const banner = document.createElement('div');
-        banner.className = 'emulated-banner';
-        banner.setAttribute('data-testid', 'result-emulated-banner');
-        banner.textContent = emulatedBanner;
-        resDiv.appendChild(banner);
+        resDiv.appendChild(el('div', { class: 'emulated-banner', 'data-testid': 'result-emulated-banner' }, emulatedBanner));
       }
-      for (const r of results) {
-        const wrap = document.createElement('div');
-        wrap.className = 'grid-query-wrapper';
+      for (const r of data.results) {
+        const wrap = el('div', { class: 'grid-query-wrapper' });
         for (const f of r.fields) {
-          const cell = document.createElement('div');
-          cell.className = 'ReactVirtualized__Grid__cell';
-          cell.style.fontWeight = 'bold';
+          const cell = el('div', { class: 'ReactVirtualized__Grid__cell', style: 'font-weight:bold' });
           cell.innerText = f.name;
           wrap.appendChild(cell);
         }
-        for (const row of r.rows) {
-          for (const f of r.fields) {
-            const cell = document.createElement('div');
-            cell.className = 'ReactVirtualized__Grid__cell';
-            cell.innerText = row[f.name] === null ? 'NULL' : String(row[f.name]);
-            wrap.appendChild(cell);
-          }
-        }
+        appendRows(wrap, r);
         resDiv.appendChild(wrap);
       }
+      if (!data.page) return;
+      const wrap = resDiv.querySelector('.grid-query-wrapper');
+      const info = el('div', { 'data-testid': 'page-info' });
+      const more = el('button', { 'data-testid': 'load-more' }, 'Load more');
+      let next = data.page.next, loaded = data.results[0].rows.length;
+      const show = () => {
+        info.textContent = `Rows loaded: ${loaded} (page size ${data.page.cursor.pageSize})` + (next ? '' : ', all rows loaded');
+        more.hidden = !next;
+      };
+      more.onclick = async () => {
+        const page = await ipc('DB_EXECUTE_PAGED', db, sql, params || null, next);
+        appendRows(wrap, page.results[0]);
+        loaded += page.results[0].rows.length;
+        next = page.page && page.page.next;
+        show();
+      };
+      show();
+      resDiv.append(info, more);
     }
 
     fetch('/api/session', { credentials: 'same-origin' }).then(r => r.json()).then(json => {

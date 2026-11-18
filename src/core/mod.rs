@@ -12,6 +12,7 @@ pub mod filters;
 pub mod history;
 pub mod import;
 pub mod keys;
+pub mod paging;
 pub mod params;
 pub mod result_ops;
 pub mod safety;

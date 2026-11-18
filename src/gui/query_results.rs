@@ -108,6 +108,19 @@ impl RustSqlGuiApp {
                 let row_count = res.row_count.unwrap_or(res.rows.len());
                 ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(format!("Rows: {row_count}")).strong());
+                    if let Some(page) = query_tab.page.as_ref().filter(|_| idx == 0) {
+                        ui.label(format!("(page size {})", page.page_size));
+                        if page.next.is_some() {
+                            if ui.small_button("⬇ Load more").clicked() {
+                                let rt = self.rt.clone();
+                                if let Err(e) = rt.block_on(self.store.fetch_more_rows()) {
+                                    self.store.status = e;
+                                }
+                            }
+                        } else {
+                            ui.label(RichText::new("all rows loaded").weak());
+                        }
+                    }
                     ui.separator();
                     ui.label(format!("{:.3}s", secs));
                     if row_count > 0 {
