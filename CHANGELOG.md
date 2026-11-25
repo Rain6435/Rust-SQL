@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-11-25
+
+### Changed
+- **Custom vector icon system (`src/gui/icons.rs`).** Added 33 crisp `egui::Painter` vector
+  icons rendered in `AppTheme` colors across the header breadcrumbs, footer, connections
+  dashboard, database explorer tree (databases, tables, views, columns, indexes, triggers,
+  functions, procedures), SQL editor toolbar, and query results bar.
+- **Structured modal overhauls.** Added `modal_section` cards, vector icon headers, consistent
+  right-aligned action footers, and `Enter`-to-submit across Server Configuration, Settings,
+  Content Preview (with `Copy`), SSH Passphrase, Keyboard Shortcuts, Dialect Notes, File
+  Save/Open/Export, Destructive Query Warning, Software Update, Bookmarks & History, Column
+  Statistics, Schema ERD, CSV/JSON Import, and SSH Host Keys modals.
+
 ## [2.1.0] - 2026-11-25
 
 ### Changed
