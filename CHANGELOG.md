@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-11-25
+
+### Added
+- **Database engine vector logos (`src/gui/icons.rs`).** Added custom-painted vector logos for
+  PostgreSQL, MySQL, MariaDB, Redshift, Microsoft SQL Server, SQLite, and Cassandra, displayed in
+  the Server Configuration engine selector dropdown, server cards/rows, sidebar header, and
+  breadcrumb bar.
+
 ## [2.1.1] - 2026-11-25
 
 ### Changed
