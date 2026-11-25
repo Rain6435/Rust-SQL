@@ -17,6 +17,7 @@ pub mod server_management;
 pub mod settings_draft;
 pub mod sidebar;
 pub mod sidebar_objects;
+pub mod theme;
 
 pub use server_draft::ServerFormDraft;
 pub use settings_draft::SettingsFormDraft;
@@ -186,36 +187,59 @@ impl RustSqlGuiApp {
         self.render_bookmarks_stats_erd_modals(ctx);
         self.render_import_modal(ctx);
     }
+    /// Returns the active [`theme::AppTheme`] based on the user's dark-mode preference.
+    pub fn current_theme(&self) -> theme::AppTheme {
+        let dark = self
+            .store
+            .config
+            .data
+            .as_ref()
+            .map(|c| c.enabled_dark_theme)
+            .unwrap_or(true);
+        theme::AppTheme::from_dark(dark)
+    }
 }
 
 impl eframe::App for RustSqlGuiApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        let theme = self.current_theme();
+        theme.apply(&ctx);
         if let Some(ref cfg) = self.store.config.data {
-            if cfg.enabled_dark_theme {
-                ctx.set_visuals(egui::Visuals::dark());
-            } else {
-                ctx.set_visuals(egui::Visuals::light());
-            }
             ctx.set_pixels_per_point((cfg.zoom_factor as f32).clamp(0.4, 3.0));
         }
 
         self.handle_global_shortcuts(&ctx);
 
+        let header_frame = egui::Frame::new()
+            .fill(theme.bg_surface)
+            .stroke(egui::Stroke::new(1.0, theme.border_hairline))
+            .inner_margin(egui::Margin::symmetric(12, 4));
         egui::Panel::top("rust_sql_header")
-            .exact_size(56.0)
+            .frame(header_frame)
+            .exact_size(60.0)
             .show(ui, |ui| self.render_header(ui));
 
+        let footer_frame = egui::Frame::new()
+            .fill(theme.bg_surface)
+            .stroke(egui::Stroke::new(1.0, theme.border_hairline))
+            .inner_margin(egui::Margin::symmetric(12, 4));
         egui::Panel::bottom("rust_sql_footer")
+            .frame(footer_frame)
             .exact_size(28.0)
             .show(ui, |ui| self.render_footer(ui));
 
-        egui::CentralPanel::default().show(ui, |ui| match self.route.clone() {
-            ActiveRoute::ServerManagement => self.render_server_management(ui),
-            ActiveRoute::QueryBrowser(ref server_id) => {
-                self.render_query_browser(&ctx, ui, server_id)
-            }
-        });
+        let central_frame = egui::Frame::new()
+            .fill(theme.bg_canvas)
+            .inner_margin(egui::Margin::same(12));
+        egui::CentralPanel::default()
+            .frame(central_frame)
+            .show(ui, |ui| match self.route.clone() {
+                ActiveRoute::ServerManagement => self.render_server_management(ui),
+                ActiveRoute::QueryBrowser(ref server_id) => {
+                    self.render_query_browser(&ctx, ui, server_id)
+                }
+            });
 
         self.render_modals(&ctx);
     }

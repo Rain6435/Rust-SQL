@@ -114,6 +114,7 @@ impl RustSqlGuiApp {
     }
 
     fn render_table_children(&self, ui: &mut egui::Ui, db_name: &str, tbl_name: &str) {
+        let theme = self.current_theme();
         ui.indent(format!("tbl_meta_{db_name}_{tbl_name}"), |ui| {
             let cols = self
                 .store
@@ -126,8 +127,13 @@ impl RustSqlGuiApp {
             ui.collapsing(format!("Columns ({})", cols.len()), |ui| {
                 for c in cols {
                     ui.horizontal(|ui| {
-                        ui.label(&c.name);
-                        ui.label(RichText::new(c.data_type.to_uppercase()).small().weak());
+                        ui.label(RichText::new(&c.name).color(theme.text_primary));
+                        ui.label(
+                            RichText::new(c.data_type.to_uppercase())
+                                .monospace()
+                                .small()
+                                .color(theme.text_muted),
+                        );
                     });
                 }
             });
@@ -141,7 +147,7 @@ impl RustSqlGuiApp {
                 .unwrap_or_default();
             ui.collapsing(format!("Triggers ({})", triggers.len()), |ui| {
                 for tr in triggers {
-                    ui.label(&tr.name);
+                    ui.label(RichText::new(&tr.name).color(theme.text_primary));
                 }
             });
             let indexes = self
@@ -154,7 +160,7 @@ impl RustSqlGuiApp {
                 .unwrap_or_default();
             ui.collapsing(format!("Indexes ({})", indexes.len()), |ui| {
                 for idx in indexes {
-                    ui.label(&idx.name);
+                    ui.label(RichText::new(&idx.name).color(theme.text_primary));
                 }
             });
         });

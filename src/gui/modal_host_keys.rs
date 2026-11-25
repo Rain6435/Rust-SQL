@@ -1,7 +1,8 @@
 //! SSH bastion host-key approval prompt and the trusted host-key manager (Settings).
 
+use crate::gui::theme::{primary_button, subtle_button};
 use crate::gui::RustSqlGuiApp;
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 
 impl RustSqlGuiApp {
     /// Shows the fingerprint of an unknown or expiring bastion key and asks for approval.
@@ -9,6 +10,7 @@ impl RustSqlGuiApp {
         let Some(challenge) = self.store.connections.host_key_prompt.clone() else {
             return;
         };
+        let theme = self.current_theme();
         egui::Window::new("Verify SSH host key")
             .collapsible(false)
             .resizable(false)
@@ -18,18 +20,25 @@ impl RustSqlGuiApp {
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     ui.label("Fingerprint:");
-                    ui.monospace(RichText::new(&challenge.fingerprint_sha256).strong());
+                    ui.monospace(
+                        RichText::new(&challenge.fingerprint_sha256)
+                            .strong()
+                            .color(theme.accent_secondary),
+                    );
                 });
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    if ui.button("Trust this key and connect").clicked() {
+                    if ui
+                        .add(primary_button(&theme, "Trust this key and connect"))
+                        .clicked()
+                    {
                         match self.store.approve_host_key() {
                             Ok(Some(server_id)) => self.connect_to_server(&server_id, None, None),
                             Ok(None) => {}
                             Err(e) => self.store.connections.error = Some(e),
                         }
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.add(subtle_button(&theme, "Cancel")).clicked() {
                         self.store.reject_host_key();
                     }
                 });
@@ -41,6 +50,7 @@ impl RustSqlGuiApp {
         if !self.show_host_keys_modal {
             return;
         }
+        let theme = self.current_theme();
         let pins = match self.store.list_host_keys() {
             Ok(p) => p,
             Err(e) => {
@@ -56,12 +66,16 @@ impl RustSqlGuiApp {
             .default_width(620.0)
             .show(ctx, |ui| {
                 ui.label(
-                    "Keys are re-confirmed every 180 days. Delete a pin only after your \
-                     administrator confirms the bastion's key was rotated.",
+                    RichText::new(
+                        "Keys are re-confirmed every 180 days. Delete a pin only after your \
+                         administrator confirms the bastion's key was rotated.",
+                    )
+                    .small()
+                    .color(theme.text_muted),
                 );
                 ui.separator();
                 if pins.is_empty() {
-                    ui.label("No host keys trusted yet.");
+                    ui.label(RichText::new("No host keys trusted yet.").color(theme.text_muted));
                 }
                 egui::Grid::new("host_keys_grid")
                     .striped(true)
@@ -74,7 +88,7 @@ impl RustSqlGuiApp {
                             ));
                             ui.label(pin.approved_at.date().to_string());
                             if ui
-                                .button(RichText::new("Delete").color(Color32::LIGHT_RED))
+                                .button(RichText::new("Delete").color(theme.semantic_err))
                                 .clicked()
                             {
                                 delete = Some((pin.host.clone(), pin.port));

@@ -3,7 +3,7 @@
 use crate::adapters::CLIENTS;
 use crate::core::connection_string::{build_connection_uri, parse_connection_uri};
 use crate::gui::{RustSqlGuiApp, ServerFormDraft};
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 use std::collections::HashSet;
 
 impl RustSqlGuiApp {
@@ -12,19 +12,20 @@ impl RustSqlGuiApp {
         if !self.store.servers.is_editing {
             return;
         }
+        let theme = self.current_theme();
         egui::Window::new("Server Information")
             .collapsible(false)
             .resizable(true)
             .default_width(620.0)
             .show(ctx, |ui| {
                 if self.store.connections.test_connected {
-                    ui.colored_label(Color32::GREEN, "✔ Successfully connected");
+                    ui.colored_label(theme.semantic_ok, "✔ Successfully connected");
                 } else if let Some(ref err) = self.store.connections.test_error {
-                    ui.colored_label(Color32::LIGHT_RED, format!("✖ Connection Error: {err}"));
+                    ui.colored_label(theme.semantic_err, format!("✖ Connection Error: {err}"));
                 }
                 if let Some(ref v_errs) = self.store.servers.error {
                     for (field, msg) in v_errs {
-                        ui.colored_label(Color32::LIGHT_RED, format!("• {field}: {msg}"));
+                        ui.colored_label(theme.semantic_err, format!("• {field}: {msg}"));
                     }
                 }
 
@@ -42,27 +43,44 @@ impl RustSqlGuiApp {
 
                 ui.separator();
                 ui.horizontal(|ui| {
-                    if ui.button("Test").clicked() {
+                    if ui
+                        .add(crate::gui::theme::subtle_button(&theme, "Test"))
+                        .clicked()
+                    {
                         let srv = self.server_draft.to_server();
                         let rt = self.rt.clone();
                         let _ = rt.block_on(self.store.test_connection(srv));
                     }
                     let is_new = self.server_draft.id.trim().is_empty();
-                    if !is_new && ui.button("Duplicate").clicked() {
+                    if !is_new
+                        && ui
+                            .add(crate::gui::theme::subtle_button(&theme, "Duplicate"))
+                            .clicked()
+                    {
                         let srv = self.server_draft.to_server();
                         let _ = self.store.duplicate_server(srv);
                     }
-                    if !is_new && ui.button("🗑 Remove").clicked() {
+                    if !is_new
+                        && ui
+                            .add(crate::gui::theme::subtle_button(&theme, "Remove"))
+                            .clicked()
+                    {
                         self.confirm_delete_server = true;
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Save").clicked() {
+                        if ui
+                            .add(crate::gui::theme::primary_button(&theme, "Save"))
+                            .clicked()
+                        {
                             let srv = self.server_draft.to_server();
                             let id = (!self.server_draft.id.trim().is_empty())
                                 .then(|| self.server_draft.id.clone());
                             let _ = self.store.save_server(srv, id.as_deref());
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui
+                            .add(crate::gui::theme::subtle_button(&theme, "Cancel"))
+                            .clicked()
+                        {
                             self.store.finish_editing_server();
                         }
                     });
@@ -98,8 +116,13 @@ impl RustSqlGuiApp {
             );
         });
 
+        let theme = self.current_theme();
         ui.separator();
-        ui.label(RichText::new("Server Address").strong());
+        ui.label(
+            RichText::new("Server Address")
+                .strong()
+                .color(theme.accent_secondary),
+        );
         let no_sock = self.server_draft.socket_path.trim().is_empty();
         ui.horizontal(|ui| {
             ui.label("Host:");
@@ -127,7 +150,11 @@ impl RustSqlGuiApp {
         });
 
         ui.separator();
-        ui.label(RichText::new("Credentials & Database").strong());
+        ui.label(
+            RichText::new("Credentials & Database")
+                .strong()
+                .color(theme.accent_secondary),
+        );
         ui.horizontal(|ui| {
             ui.label("User:");
             ui.add_enabled(
@@ -142,11 +169,14 @@ impl RustSqlGuiApp {
                     .desired_width(150.0),
             );
             let eye_label = if self.server_draft.show_plain_password {
-                "🙈"
+                "Hide"
             } else {
-                "👁"
+                "Show"
             };
-            if ui.button(eye_label).clicked() {
+            if ui
+                .add(crate::gui::theme::subtle_button(&theme, eye_label))
+                .clicked()
+            {
                 self.server_draft.show_plain_password = !self.server_draft.show_plain_password;
                 self.server_draft.conn_uri = build_connection_uri(
                     &self.server_draft.to_server(),

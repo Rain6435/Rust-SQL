@@ -4,10 +4,10 @@ use crate::common::types::ConnectionMode;
 use crate::core::sql_formatter::format_sql;
 use crate::core::updater::check_for_updates;
 use crate::gui::{ActiveRoute, RustSqlGuiApp};
-use eframe::egui::{self, Color32, Key, KeyboardShortcut, Modifiers, RichText};
+use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText};
 
 impl RustSqlGuiApp {
-    /// Processes global keyboard shortcuts (`Ctrl+Q`, `Ctrl+T`, `Ctrl+W`, `Ctrl+Enter`/`Ctrl+R`, `Ctrl+I`, `Ctrl+S`).
+    /// Processes global keyboard shortcuts (`Ctrl+Q`, `Ctrl+T`, `Ctrl+W`, `Ctrl+Enter`/`Ctrl+R`, `Ctrl+I`, `Ctrl+S`, `Ctrl+O`, Zoom, `Esc`).
     pub(crate) fn handle_global_shortcuts(&mut self, ctx: &egui::Context) {
         let ctrl_q = KeyboardShortcut::new(Modifiers::COMMAND, Key::Q);
         let ctrl_t = KeyboardShortcut::new(Modifiers::COMMAND, Key::T);
@@ -16,11 +16,54 @@ impl RustSqlGuiApp {
         let ctrl_r = KeyboardShortcut::new(Modifiers::COMMAND, Key::R);
         let ctrl_i = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
         let ctrl_s = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
+        let ctrl_o = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
+        let ctrl_plus = KeyboardShortcut::new(Modifiers::COMMAND, Key::Equals);
+        let ctrl_minus = KeyboardShortcut::new(Modifiers::COMMAND, Key::Minus);
+        let ctrl_zero = KeyboardShortcut::new(Modifiers::COMMAND, Key::Num0);
+
+        let mut zoom_delta: Option<Option<f64>> = None;
 
         ctx.input_mut(|i| {
             if i.consume_shortcut(&ctrl_q) {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
+            if i.consume_shortcut(&ctrl_plus) {
+                zoom_delta = Some(Some(0.2));
+            } else if i.consume_shortcut(&ctrl_minus) {
+                zoom_delta = Some(Some(-0.2));
+            } else if i.consume_shortcut(&ctrl_zero) {
+                zoom_delta = Some(None);
+            }
+
+            if i.key_pressed(Key::Escape) {
+                if self.preview_cell_value.is_some() {
+                    self.preview_cell_value = None;
+                } else if self.pending_safety_confirm.is_some() {
+                    self.pending_safety_confirm = None;
+                } else if self.show_save_query_modal {
+                    self.show_save_query_modal = false;
+                } else if self.show_open_query_modal {
+                    self.show_open_query_modal = false;
+                } else if self.show_export_file_modal.is_some() {
+                    self.show_export_file_modal = None;
+                } else if self.show_bookmarks_modal {
+                    self.show_bookmarks_modal = false;
+                } else if self.stats_modal_data.is_some() {
+                    self.stats_modal_data = None;
+                } else if self.erd_modal_diagram.is_some() {
+                    self.erd_modal_diagram = None;
+                } else if self.show_shortcuts_modal {
+                    self.show_shortcuts_modal = false;
+                } else if self.show_client_info_modal {
+                    self.show_client_info_modal = false;
+                } else if self.show_host_keys_modal {
+                    self.show_host_keys_modal = false;
+                } else if self.update_modal_state.is_some() {
+                    self.update_modal_state = None;
+                    self.update_apply_message = None;
+                }
+            }
+
             if matches!(self.route, ActiveRoute::QueryBrowser(_)) {
                 if i.consume_shortcut(&ctrl_t) {
                     if let Some(db) = self.store.current_database() {
@@ -41,8 +84,20 @@ impl RustSqlGuiApp {
                 if i.consume_shortcut(&ctrl_s) {
                     self.show_save_query_modal = true;
                 }
+                if i.consume_shortcut(&ctrl_o) {
+                    self.show_open_query_modal = true;
+                }
             }
         });
+
+        if let Some(delta) = zoom_delta {
+            self.settings_draft.zoom_factor = match delta {
+                Some(d) => (self.settings_draft.zoom_factor + d).clamp(0.4, 3.0),
+                None => 1.0,
+            };
+            let base = self.settings_draft.to_base_config();
+            let _ = self.store.save_config(&base);
+        }
     }
 
     /// Runs safety analysis on the active query and either prompts for confirmation or executes it.
@@ -194,14 +249,21 @@ impl RustSqlGuiApp {
             });
         });
 
+        let theme = self.current_theme();
+
         ui.horizontal(|ui| {
             crate::gui::logo::render_header_logo(ui, &mut self.logo_texture);
-            ui.heading(RichText::new("Rust-SQL").strong());
+            ui.label(
+                RichText::new("Rust-SQL")
+                    .size(16.0)
+                    .strong()
+                    .color(theme.text_primary),
+            );
             ui.separator();
 
             match self.route.clone() {
                 ActiveRoute::ServerManagement => {
-                    ui.label(RichText::new("🖥 servers").strong());
+                    crate::gui::theme::badge_pill(ui, "Servers", theme.accent_secondary);
                 }
                 ActiveRoute::QueryBrowser(ref server_id) => {
                     let srv_name = self
@@ -211,18 +273,43 @@ impl RustSqlGuiApp {
                         .as_ref()
                         .map(|s| s.name.clone())
                         .unwrap_or_else(|| server_id.clone());
+                    let client_key = self
+                        .store
+                        .connections
+                        .server
+                        .as_ref()
+                        .map(|s| s.client.clone())
+                        .unwrap_or_default();
                     let db_name = self.store.current_database().unwrap_or_default();
-                    ui.label(RichText::new(format!("🖥 {srv_name}")).strong());
-                    ui.label("›");
-                    ui.label(RichText::new(format!("🗄 {db_name}")).strong());
+
+                    if !client_key.is_empty() {
+                        crate::gui::theme::badge_pill(
+                            ui,
+                            &client_key.to_uppercase(),
+                            theme.dialect_color(&client_key),
+                        );
+                    }
+                    ui.label(RichText::new(srv_name).strong().color(theme.text_primary));
+                    ui.label(RichText::new("›").color(theme.text_muted));
+                    ui.label(
+                        RichText::new(db_name)
+                            .strong()
+                            .color(theme.accent_secondary),
+                    );
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("⏻ Close connection").clicked() {
+                        if ui
+                            .add(crate::gui::theme::subtle_button(&theme, "Disconnect"))
+                            .clicked()
+                        {
                             let rt = self.rt.clone();
                             rt.block_on(self.store.disconnect());
                             self.route = ActiveRoute::ServerManagement;
                         }
-                        if ui.button("🔌 Reconnect").clicked() {
+                        if ui
+                            .add(crate::gui::theme::subtle_button(&theme, "Reconnect"))
+                            .clicked()
+                        {
                             let sid = server_id.clone();
                             let db = self.store.current_database().unwrap_or_default();
                             let rt = self.rt.clone();
@@ -236,32 +323,47 @@ impl RustSqlGuiApp {
 
     /// Renders the bottom status bar and quick links footer.
     pub(crate) fn render_footer(&mut self, ui: &mut egui::Ui) {
+        let theme = self.current_theme();
         ui.horizontal(|ui| {
             if self.store.connections.mode == Some(ConnectionMode::Emulated) {
                 crate::gui::query_results::render_emulated_banner(ui);
+            } else if matches!(self.route, ActiveRoute::QueryBrowser(_)) {
+                crate::gui::theme::badge_pill(ui, "LIVE", theme.semantic_ok);
             }
+
             if !self.store.status.is_empty() {
-                ui.label(RichText::new(&self.store.status).italics());
+                ui.label(RichText::new(&self.store.status).color(theme.text_primary));
             } else {
-                ui.label(RichText::new("Ready").weak());
+                ui.label(RichText::new("Ready").color(theme.text_muted));
             }
+
             if let Some(t) = self.store.statement_timeout_label() {
                 ui.separator();
-                ui.label(RichText::new(t).small())
+                ui.label(RichText::new(t).small().color(theme.text_muted))
                     .on_hover_text("Per-statement timeout for this connection");
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("⌨ Shortcuts").clicked() {
+                let theme_label = if theme.is_dark { "Light" } else { "Dark" };
+                if ui
+                    .small_button(theme_label)
+                    .on_hover_text("Switch color theme")
+                    .clicked()
+                {
+                    self.settings_draft.enabled_dark_theme = !theme.is_dark;
+                    let base = self.settings_draft.to_base_config();
+                    let _ = self.store.save_config(&base);
+                }
+                if ui.small_button("Shortcuts").clicked() {
                     self.show_shortcuts_modal = true;
                 }
                 ui.hyperlink_to("GitHub", "https://github.com/Rain6435/Rust-SQL");
                 if let Some(ref cfg) = self.store.config.data {
                     if cfg.log.console || cfg.log.file {
-                        ui.label(
-                            RichText::new(format!("Log: {}", cfg.log.level))
-                                .small()
-                                .color(Color32::from_rgb(234, 179, 8)),
+                        crate::gui::theme::badge_pill(
+                            ui,
+                            &format!("Log: {}", cfg.log.level),
+                            theme.semantic_warn,
                         );
                     }
                 }

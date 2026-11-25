@@ -1,20 +1,23 @@
 //! SQL Bookmarks & Execution History modal, Column Statistics modal, and Mermaid ERD modal.
 
 use crate::core::export::write_clipboard_text;
+use crate::gui::theme::{badge_pill, primary_button, subtle_button};
 use crate::gui::RustSqlGuiApp;
-use eframe::egui;
+use eframe::egui::{self, CornerRadius, Margin, RichText, Stroke};
 
 impl RustSqlGuiApp {
     /// Renders the SQL Bookmarks & Execution History modal, Column Statistics modal, and Mermaid ERD modal.
     pub(crate) fn render_bookmarks_stats_erd_modals(&mut self, ctx: &egui::Context) {
+        let theme = self.current_theme();
+
         if self.show_bookmarks_modal {
-            egui::Window::new("🔖 SQL Bookmarks & Execution History")
+            egui::Window::new("SQL Bookmarks & Execution History")
                 .collapsible(false)
                 .resizable(true)
-                .default_width(580.0)
+                .default_width(600.0)
                 .show(ctx, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label("Save Current Query as Bookmark:");
+                        ui.label("Save query:");
                         ui.add(
                             egui::TextEdit::singleline(&mut self.bookmark_title_input)
                                 .hint_text("Title...")
@@ -25,7 +28,7 @@ impl RustSqlGuiApp {
                                 .hint_text("Tags (comma-separated)...")
                                 .desired_width(140.0),
                         );
-                        if ui.button("➕ Save Bookmark").clicked() {
+                        if ui.add(primary_button(&theme, "+ Save")).clicked() {
                             if let Some(sql) = self.store.current_query().map(|q| q.query.clone()) {
                                 let tags: Vec<String> = self
                                     .bookmark_tags_input
@@ -51,10 +54,11 @@ impl RustSqlGuiApp {
                         }
                     });
                     ui.separator();
-                    ui.horizontal(|ui| {
-                        ui.label("🔍 Search:");
-                        ui.text_edit_singleline(&mut self.bookmark_search_input);
-                    });
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.bookmark_search_input)
+                            .hint_text("Search bookmarks and history...")
+                            .desired_width(ui.available_width()),
+                    );
 
                     ui.collapsing("Saved Bookmarks", |ui| {
                         let bms: Vec<_> = self
@@ -67,11 +71,14 @@ impl RustSqlGuiApp {
                         for bm in bms {
                             ui.horizontal(|ui| {
                                 ui.strong(&bm.title);
-                                ui.monospace(&bm.sql);
+                                ui.monospace(RichText::new(&bm.sql).color(theme.text_muted));
                                 if ui.small_button("Insert").clicked() {
                                     self.store.append_query(&bm.sql);
                                 }
-                                if ui.small_button("🗑").clicked() {
+                                if ui
+                                    .small_button(RichText::new("Delete").color(theme.semantic_err))
+                                    .clicked()
+                                {
                                     self.store.bookmark_manager.remove_bookmark(&bm.id);
                                 }
                             });
@@ -88,10 +95,15 @@ impl RustSqlGuiApp {
                             .collect();
                         for h in hist {
                             ui.horizontal(|ui| {
-                                ui.label(format!(
-                                    "[{}] {}ms ({} rows)",
-                                    h.database, h.duration_ms, h.row_count
-                                ));
+                                badge_pill(ui, &h.database, theme.accent_secondary);
+                                ui.label(
+                                    RichText::new(format!(
+                                        "{}ms · {} rows",
+                                        h.duration_ms, h.row_count
+                                    ))
+                                    .small()
+                                    .color(theme.text_muted),
+                                );
                                 ui.monospace(h.display_sql.as_deref().unwrap_or(&h.sql));
                                 if ui.small_button("Replay").clicked() {
                                     self.store.update_query_if_needed(&h.sql, None, None);
@@ -101,14 +113,14 @@ impl RustSqlGuiApp {
                     });
 
                     ui.separator();
-                    if ui.button("Close").clicked() {
+                    if ui.add(subtle_button(&theme, "Close")).clicked() {
                         self.show_bookmarks_modal = false;
                     }
                 });
         }
 
         if let Some(ref stats) = self.stats_modal_data.clone() {
-            egui::Window::new("📊 Column Summary Statistics")
+            egui::Window::new("Column Summary Statistics")
                 .collapsible(false)
                 .resizable(true)
                 .default_width(600.0)
@@ -119,11 +131,16 @@ impl RustSqlGuiApp {
                         .current_query()
                         .and_then(|q| q.page.as_ref())
                         .is_some_and(|p| p.next.is_some());
-                    ui.label(if partial {
-                        format!("Computed over the {rows} rows loaded so far, not the full result. Load more rows to include them.")
-                    } else {
-                        format!("Computed over all {rows} rows of the result.")
-                    });
+                    ui.label(
+                        RichText::new(if partial {
+                            format!("Computed over the {rows} rows loaded so far, not the full result. Load more rows to include them.")
+                        } else {
+                            format!("Computed over all {rows} rows of the result.")
+                        })
+                        .small()
+                        .color(theme.text_muted),
+                    );
+                    ui.add_space(4.0);
                     egui::Grid::new("col_stats_grid")
                         .striped(true)
                         .show(ui, |ui| {
@@ -148,29 +165,36 @@ impl RustSqlGuiApp {
                             }
                         });
                     ui.separator();
-                    if ui.button("Close").clicked() {
+                    if ui.add(subtle_button(&theme, "Close")).clicked() {
                         self.stats_modal_data = None;
                     }
                 });
         }
 
         if let Some(ref erd) = self.erd_modal_diagram.clone() {
-            egui::Window::new("🗺 Schema ER Diagram (Mermaid)")
+            egui::Window::new("Schema ER Diagram (Mermaid)")
                 .collapsible(false)
                 .resizable(true)
                 .default_width(540.0)
                 .show(ctx, |ui| {
-                    egui::ScrollArea::vertical()
-                        .max_height(340.0)
+                    egui::Frame::new()
+                        .fill(theme.bg_canvas)
+                        .stroke(Stroke::new(1.0, theme.border_hairline))
+                        .corner_radius(CornerRadius::same(6))
+                        .inner_margin(Margin::same(8))
                         .show(ui, |ui| {
-                            ui.monospace(erd);
+                            egui::ScrollArea::vertical()
+                                .max_height(340.0)
+                                .show(ui, |ui| {
+                                    ui.monospace(erd);
+                                });
                         });
-                    ui.separator();
+                    ui.add_space(6.0);
                     ui.horizontal(|ui| {
-                        if ui.button("📋 Copy Mermaid").clicked() {
+                        if ui.add(primary_button(&theme, "Copy Mermaid")).clicked() {
                             write_clipboard_text(erd);
                         }
-                        if ui.button("Close").clicked() {
+                        if ui.add(subtle_button(&theme, "Close")).clicked() {
                             self.erd_modal_diagram = None;
                         }
                     });

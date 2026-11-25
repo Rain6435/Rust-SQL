@@ -116,14 +116,23 @@ impl RustSqlGuiApp {
                     ui.label(RichText::new(format!("Config Path: {p}")).small().weak());
                 }
                 ui.separator();
+                let theme = self.current_theme();
                 ui.horizontal(|ui| {
-                    if ui.button("Save").clicked() {
-                        let base = self.settings_draft.to_base_config();
-                        let _ = self.store.save_config(&base);
-                    }
-                    if ui.button("Cancel").clicked() {
-                        self.store.finish_editing_config();
-                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .add(crate::gui::theme::primary_button(&theme, "Save"))
+                            .clicked()
+                        {
+                            let base = self.settings_draft.to_base_config();
+                            let _ = self.store.save_config(&base);
+                        }
+                        if ui
+                            .add(crate::gui::theme::subtle_button(&theme, "Cancel"))
+                            .clicked()
+                        {
+                            self.store.finish_editing_config();
+                        }
+                    });
                 });
             });
     }
@@ -133,6 +142,7 @@ impl RustSqlGuiApp {
         let Some(val) = self.preview_cell_value.clone() else {
             return;
         };
+        let theme = self.current_theme();
         egui::Window::new("Content Preview")
             .collapsible(false)
             .resizable(true)
@@ -168,13 +178,23 @@ impl RustSqlGuiApp {
                 } else {
                     value_to_string(&val)
                 };
-                egui::ScrollArea::vertical()
-                    .max_height(350.0)
+                egui::Frame::new()
+                    .fill(theme.bg_canvas)
+                    .stroke(egui::Stroke::new(1.0, theme.border_hairline))
+                    .corner_radius(egui::CornerRadius::same(6))
+                    .inner_margin(egui::Margin::same(8))
                     .show(ui, |ui| {
-                        ui.monospace(formatted);
+                        egui::ScrollArea::vertical()
+                            .max_height(350.0)
+                            .show(ui, |ui| {
+                                ui.monospace(formatted);
+                            });
                     });
                 ui.separator();
-                if ui.button("Close").clicked() {
+                if ui
+                    .add(crate::gui::theme::subtle_button(&theme, "Close"))
+                    .clicked()
+                {
                     self.preview_cell_value = None;
                 }
             });
@@ -182,6 +202,8 @@ impl RustSqlGuiApp {
 
     /// Renders the SSH passphrase prompt, Keyboard Shortcuts modal, and Dialect Info modal.
     pub(crate) fn render_passphrase_and_info_modals(&mut self, ctx: &egui::Context) {
+        let theme = self.current_theme();
+
         if self.store.connections.waiting_private_key_passphrase {
             egui::Window::new("SSH Private Key Passphrase")
                 .collapsible(false)
@@ -191,8 +213,12 @@ impl RustSqlGuiApp {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.ssh_passphrase_input).password(true),
                     );
+                    ui.add_space(6.0);
                     ui.horizontal(|ui| {
-                        if ui.button("OK").clicked() {
+                        if ui
+                            .add(crate::gui::theme::primary_button(&theme, "OK"))
+                            .clicked()
+                        {
                             if let Some(srv_id) =
                                 self.store.connections.server.as_ref().map(|s| s.id.clone())
                             {
@@ -201,7 +227,10 @@ impl RustSqlGuiApp {
                                 self.connect_to_server(&srv_id, None, Some(pass));
                             }
                         }
-                        if ui.button("Cancel").clicked() {
+                        if ui
+                            .add(crate::gui::theme::subtle_button(&theme, "Cancel"))
+                            .clicked()
+                        {
                             let rt = self.rt.clone();
                             rt.block_on(self.store.disconnect());
                         }
@@ -214,13 +243,33 @@ impl RustSqlGuiApp {
                 .collapsible(false)
                 .resizable(false)
                 .show(ctx, |ui| {
-                    ui.monospace("Ctrl+Enter / Ctrl+R  : Execute Query");
-                    ui.monospace("Ctrl+T               : New Query Tab");
-                    ui.monospace("Ctrl+W               : Close Query Tab");
-                    ui.monospace("Ctrl+S               : Save Query");
-                    ui.monospace("Ctrl+I               : Format SQL Query");
-                    ui.monospace("Ctrl+Q               : Quit Application");
-                    if ui.button("Close").clicked() {
+                    egui::Grid::new("shortcuts_grid")
+                        .striped(true)
+                        .spacing([16.0, 6.0])
+                        .show(ui, |ui| {
+                            for (keys, desc) in [
+                                ("Ctrl+Enter / Ctrl+R", "Execute Query"),
+                                ("Ctrl+T", "New Query Tab"),
+                                ("Ctrl+W", "Close Query Tab"),
+                                ("Ctrl+O", "Open Query"),
+                                ("Ctrl+S", "Save Query"),
+                                ("Ctrl+I", "Format SQL Query"),
+                                ("Ctrl+= / Ctrl+- / Ctrl+0", "Zoom In / Out / Reset"),
+                                ("Esc", "Close Active Modal"),
+                                ("Ctrl+Q", "Quit Application"),
+                            ] {
+                                ui.monospace(
+                                    RichText::new(keys).strong().color(theme.accent_secondary),
+                                );
+                                ui.label(desc);
+                                ui.end_row();
+                            }
+                        });
+                    ui.separator();
+                    if ui
+                        .add(crate::gui::theme::subtle_button(&theme, "Close"))
+                        .clicked()
+                    {
                         self.show_shortcuts_modal = false;
                     }
                 });
@@ -257,7 +306,11 @@ impl RustSqlGuiApp {
                     for note in notes {
                         ui.label(format!("• {note}"));
                     }
-                    if ui.button("Close").clicked() {
+                    ui.separator();
+                    if ui
+                        .add(crate::gui::theme::subtle_button(&theme, "Close"))
+                        .clicked()
+                    {
                         self.show_client_info_modal = false;
                     }
                 });

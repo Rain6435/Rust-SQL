@@ -122,6 +122,7 @@ impl RustSqlGuiApp {
         let Some(mut st) = self.import_modal.clone() else {
             return;
         };
+        let theme = self.current_theme();
         let db = self.store.current_database().unwrap_or_default();
         let tables = self
             .store
@@ -132,14 +133,16 @@ impl RustSqlGuiApp {
             .unwrap_or_default();
         let read_only = self.store.read_only_mode;
         let (mut open, mut load, mut pick, mut run) = (true, false, None, false);
-        egui::Window::new(format!("📥 Import into {db}"))
+        egui::Window::new(format!("Import into {db}"))
             .open(&mut open)
             .default_width(720.0)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("File (.csv, .tsv, .json, .jsonl):");
                     ui.text_edit_singleline(&mut st.path);
-                    load = ui.button("Load").clicked();
+                    load = ui
+                        .add(crate::gui::theme::subtle_button(&theme, "Load"))
+                        .clicked();
                 });
                 ui.horizontal(|ui| {
                     ui.label("Target table:");
@@ -156,11 +159,15 @@ impl RustSqlGuiApp {
                     );
                 });
                 if let Some(data) = st.data.clone() {
-                    ui.label(format!(
-                        "{} rows. Preview of the first {}; pick a target column for each source column:",
-                        data.rows.len(),
-                        data.preview(PREVIEW_ROWS).len()
-                    ));
+                    ui.label(
+                        RichText::new(format!(
+                            "{} rows. Preview of the first {}; pick a target column for each source column:",
+                            data.rows.len(),
+                            data.preview(PREVIEW_ROWS).len()
+                        ))
+                        .small()
+                        .color(theme.text_muted),
+                    );
                     let mut table = TableBuilder::new(ui).striped(true).max_scroll_height(240.0);
                     for _ in &data.columns {
                         table = table.column(Column::initial(120.0).at_least(60.0).clip(true));
@@ -205,15 +212,21 @@ impl RustSqlGuiApp {
                         && (!data.requires_confirmation() || st.confirmed)
                         && !read_only;
                     ui.horizontal(|ui| {
-                        run = ui.add_enabled(ready, egui::Button::new("Import")).clicked();
+                        run = ui
+                            .add_enabled(ready, crate::gui::theme::primary_button(&theme, "Import"))
+                            .clicked();
                         if read_only {
-                            ui.label("Import is disabled in Read-Only mode.");
+                            ui.label(
+                                RichText::new("Import is disabled in Read-Only mode.")
+                                    .small()
+                                    .color(theme.semantic_warn),
+                            );
                         }
                     });
                 }
                 match &st.message {
-                    Some(Ok(m)) => ui.label(RichText::new(m).color(Color32::from_rgb(34, 197, 94))),
-                    Some(Err(e)) => ui.label(RichText::new(e).color(Color32::LIGHT_RED)),
+                    Some(Ok(m)) => ui.label(RichText::new(m).color(theme.semantic_ok)),
+                    Some(Err(e)) => ui.label(RichText::new(e).color(theme.semantic_err)),
                     None => ui.label(""),
                 };
             });

@@ -31,24 +31,38 @@ impl RustSqlGuiApp {
         ui: &mut egui::Ui,
         accept_first: bool,
     ) -> Option<String> {
+        let theme = self.current_theme();
         let c = self.completion.as_ref()?;
         if accept_first {
             return c.items.first().map(|i| i.label.clone());
         }
         let mut picked = None;
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Suggestions:").weak());
-            for item in c.items.iter().take(SHOWN) {
-                let tag = match item.kind {
-                    CompletionKind::Column => "col",
-                    CompletionKind::Table => "table",
-                    CompletionKind::Keyword => "kw",
-                };
-                if ui.small_button(&item.label).on_hover_text(tag).clicked() {
-                    picked = Some(item.label.clone());
-                }
-            }
-        });
+        egui::Frame::new()
+            .fill(theme.bg_surface)
+            .stroke(egui::Stroke::new(1.0, theme.border_hairline))
+            .corner_radius(egui::CornerRadius::same(4))
+            .inner_margin(egui::Margin::symmetric(8, 4))
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new("Tab:").small().color(theme.text_muted));
+                    for item in c.items.iter().take(SHOWN) {
+                        let (tag, color) = match item.kind {
+                            CompletionKind::Column => ("col", theme.accent_secondary),
+                            CompletionKind::Table => ("tbl", theme.semantic_ok),
+                            CompletionKind::Keyword => ("kw", theme.accent_primary),
+                        };
+                        let btn = egui::Button::new(
+                            RichText::new(&item.label).monospace().small().color(color),
+                        )
+                        .fill(color.gamma_multiply(0.12))
+                        .stroke(egui::Stroke::new(1.0, color.gamma_multiply(0.45)))
+                        .corner_radius(egui::CornerRadius::same(4));
+                        if ui.add(btn).on_hover_text(tag).clicked() {
+                            picked = Some(item.label.clone());
+                        }
+                    }
+                });
+            });
         picked
     }
 
