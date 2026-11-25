@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.3] - 2026-11-25
+
+### Changed
+- **Settings font selector (`src/gui/modal_settings.rs`).** Replaced the free-text `Custom Font`
+  input with a curated `ComboBox` preset list (`Lato`, `Inter`, `IBM Plex Sans`, `Source Sans 3`,
+  `Roboto`, `JetBrains Mono`, `Fira Code`, `IBM Plex Mono`, `Source Code Pro`, `System Default`),
+  preserving any existing custom font entry.
+
 ## [2.1.2] - 2026-11-25
 
 ### Added
