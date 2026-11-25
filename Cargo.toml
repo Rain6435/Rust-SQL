@@ -1,6 +1,6 @@
 [package]
 name = "Rust-SQL"
-version = "2.0.0"
+version = "2.1.0"
 edition = "2021"
 authors = ["Mohammed Elhasnaoui <77762120+Rain6435@users.noreply.github.com>"]
 description = "A fast, lightweight, cross-database, and cross-platform SQL client written in Rust"

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-25
+
+### Changed
+- **Desktop GUI visual identity & theme system (`src/gui/theme.rs`).** Introduced a dual-mode
+  `AppTheme` palette (**Deep Slate Foundry** dark and **Drafting Paper** light) with 1px hairline
+  outlines, differentiated corner radii, dialect-coded badges (PostgreSQL, MySQL/MariaDB, SQLite,
+  SQL Server, Cassandra), and unified `primary_button` / `danger_button` / `subtle_button` /
+  `card_frame` / `badge_pill` primitives across all screens and modals.
+- **Header, footer, and server dashboard.** Added dialect & connection-mode (`LIVE` / `EMULATED`)
+  status pills, a 1-click `Light`/`Dark` theme toggle in the footer, a `Grid`/`List` view toggle
+  in the Connections toolbar, `SSH`/`SSL` badges on server cards, and `Enter`-to-connect when
+  filtering narrows to a single server.
+- **Editor, sidebar, results, and UX polish.** Wired the `Wrap` toggle to horizontal scrolling,
+  added `A-`/`A+` editor font-size controls, a 1-click `Refresh` button in the database explorer,
+  an actionable empty state in the results pane, `filtered/total` row counts with a `×` filter clear
+  button, `Copy Cell` in the result context menu, and global `Ctrl+O`, Zoom (`Ctrl+=`/`-`/`0`),
+  and `Esc`-to-close-modal shortcuts.
+
 ## [2.0.0] - 2026-11-18
 
 This release replaces placeholder behavior with real implementations across connections,
