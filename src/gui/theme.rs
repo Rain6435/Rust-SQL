@@ -266,6 +266,35 @@ pub fn card_frame(theme: &AppTheme) -> egui::Frame {
         .inner_margin(Margin::same(12))
 }
 
+/// Renders an outlined section card inside a modal with a leading vector icon and title.
+pub fn modal_section(
+    ui: &mut egui::Ui,
+    theme: &AppTheme,
+    icon: crate::gui::icons::IconKind,
+    title: &str,
+    add_contents: impl FnOnce(&mut egui::Ui),
+) {
+    egui::Frame::new()
+        .fill(theme.bg_canvas)
+        .stroke(Stroke::new(1.0, theme.border_hairline))
+        .corner_radius(CornerRadius::same(6))
+        .inner_margin(Margin::same(10))
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.horizontal(|ui| {
+                crate::gui::icons::paint_icon_ui(ui, icon, 13.0, theme.accent_secondary);
+                ui.label(
+                    RichText::new(title)
+                        .strong()
+                        .size(13.5)
+                        .color(theme.accent_secondary),
+                );
+            });
+            ui.add_space(4.0);
+            add_contents(ui);
+        });
+}
+
 #[cfg(test)]
 mod tests {
     use super::AppTheme;

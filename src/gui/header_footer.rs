@@ -289,8 +289,20 @@ impl RustSqlGuiApp {
                             theme.dialect_color(&client_key),
                         );
                     }
+                    crate::gui::icons::paint_icon_ui(
+                        ui,
+                        crate::gui::icons::IconKind::Server,
+                        13.0,
+                        theme.text_muted,
+                    );
                     ui.label(RichText::new(srv_name).strong().color(theme.text_primary));
                     ui.label(RichText::new("›").color(theme.text_muted));
+                    crate::gui::icons::paint_icon_ui(
+                        ui,
+                        crate::gui::icons::IconKind::Database,
+                        13.0,
+                        theme.accent_secondary,
+                    );
                     ui.label(
                         RichText::new(db_name)
                             .strong()
@@ -298,17 +310,25 @@ impl RustSqlGuiApp {
                     );
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui
-                            .add(crate::gui::theme::subtle_button(&theme, "Disconnect"))
-                            .clicked()
+                        if crate::gui::icons::icon_subtle_button(
+                            ui,
+                            &theme,
+                            crate::gui::icons::IconKind::Disconnect,
+                            "Disconnect",
+                        )
+                        .clicked()
                         {
                             let rt = self.rt.clone();
                             rt.block_on(self.store.disconnect());
                             self.route = ActiveRoute::ServerManagement;
                         }
-                        if ui
-                            .add(crate::gui::theme::subtle_button(&theme, "Reconnect"))
-                            .clicked()
+                        if crate::gui::icons::icon_subtle_button(
+                            ui,
+                            &theme,
+                            crate::gui::icons::IconKind::Refresh,
+                            "Reconnect",
+                        )
+                        .clicked()
                         {
                             let sid = server_id.clone();
                             let db = self.store.current_database().unwrap_or_default();
@@ -344,9 +364,18 @@ impl RustSqlGuiApp {
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let theme_label = if theme.is_dark { "Light" } else { "Dark" };
+                let (theme_icon, theme_label) = if theme.is_dark {
+                    (crate::gui::icons::IconKind::Sun, "Light")
+                } else {
+                    (crate::gui::icons::IconKind::Moon, "Dark")
+                };
                 if ui
-                    .small_button(theme_label)
+                    .horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        crate::gui::icons::paint_icon_ui(ui, theme_icon, 12.0, theme.text_muted);
+                        ui.small_button(theme_label)
+                    })
+                    .inner
                     .on_hover_text("Switch color theme")
                     .clicked()
                 {
@@ -354,7 +383,20 @@ impl RustSqlGuiApp {
                     let base = self.settings_draft.to_base_config();
                     let _ = self.store.save_config(&base);
                 }
-                if ui.small_button("Shortcuts").clicked() {
+                if ui
+                    .horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        crate::gui::icons::paint_icon_ui(
+                            ui,
+                            crate::gui::icons::IconKind::Keyboard,
+                            12.0,
+                            theme.text_muted,
+                        );
+                        ui.small_button("Shortcuts")
+                    })
+                    .inner
+                    .clicked()
+                {
                     self.show_shortcuts_modal = true;
                 }
                 ui.hyperlink_to("GitHub", "https://github.com/Rain6435/Rust-SQL");

@@ -2,7 +2,11 @@
 
 use crate::common::types::Server;
 use crate::common::utils::escape_regexp_string;
-use crate::gui::theme::{badge_pill, card_frame, primary_button, subtle_button};
+use crate::gui::icons::{
+    icon_only_button, icon_primary_button, icon_primary_button_wide, icon_subtle_button,
+    paint_icon_ui, IconKind,
+};
+use crate::gui::theme::{badge_pill, card_frame};
 use crate::gui::{RustSqlGuiApp, ServerFormDraft, SettingsFormDraft};
 use eframe::egui::{self, CornerRadius, Margin, RichText, Stroke};
 use regex::RegexBuilder;
@@ -29,6 +33,7 @@ impl RustSqlGuiApp {
             .inner_margin(Margin::symmetric(12, 8))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
+                    paint_icon_ui(ui, IconKind::Server, 15.0, theme.accent_primary);
                     ui.label(
                         RichText::new("Connections")
                             .strong()
@@ -36,10 +41,11 @@ impl RustSqlGuiApp {
                             .color(theme.text_primary),
                     );
                     ui.separator();
+                    paint_icon_ui(ui, IconKind::Search, 13.0, theme.text_muted);
                     let search_resp = ui.add(
                         egui::TextEdit::singleline(&mut self.server_filter)
                             .hint_text("Filter servers by name... (Enter to connect)")
-                            .desired_width(260.0),
+                            .desired_width(240.0),
                     );
                     if search_resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                         filter_enter_pressed = true;
@@ -50,17 +56,21 @@ impl RustSqlGuiApp {
                         self.server_filter.clear();
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(primary_button(&theme, "+ Add Server")).clicked() {
+                        if icon_primary_button(ui, &theme, IconKind::Plus, "Add Server").clicked() {
                             let _ = self.store.start_editing_server(None);
                             self.server_draft = ServerFormDraft::from_server(None);
                         }
-                        if ui.add(subtle_button(&theme, "Settings")).clicked() {
+                        if icon_subtle_button(ui, &theme, IconKind::Settings, "Settings").clicked()
+                        {
                             self.store.start_editing_config();
                             self.settings_draft = SettingsFormDraft::from_store(&self.store);
                         }
-                        let view_label = if as_list { "Grid" } else { "List" };
-                        if ui
-                            .add(subtle_button(&theme, view_label))
+                        let (view_icon, view_label) = if as_list {
+                            (IconKind::Grid, "Grid")
+                        } else {
+                            (IconKind::List, "List")
+                        };
+                        if icon_subtle_button(ui, &theme, view_icon, view_label)
                             .on_hover_text("Toggle between Grid and List view")
                             .clicked()
                         {
@@ -82,6 +92,7 @@ impl RustSqlGuiApp {
                 .inner_margin(Margin::symmetric(12, 8))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
+                        paint_icon_ui(ui, IconKind::Warning, 14.0, theme.semantic_err);
                         ui.label(
                             RichText::new(format!("Connection Error: {err}"))
                                 .color(theme.semantic_err)
@@ -199,10 +210,10 @@ impl RustSqlGuiApp {
                         badge_pill(ui, "SSL", theme.semantic_ok);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.add(primary_button(&theme, "Connect")).clicked() {
+                        if icon_primary_button(ui, &theme, IconKind::Play, "Connect").clicked() {
                             self.connect_to_server(&srv.id, None, None);
                         }
-                        if ui.add(subtle_button(&theme, "Edit")).clicked() {
+                        if icon_subtle_button(ui, &theme, IconKind::Edit, "Edit").clicked() {
                             let _ = self.store.start_editing_server(Some(&srv.id));
                             let editing = self.store.servers.editing_server.clone();
                             self.server_draft = ServerFormDraft::from_server(editing.as_ref());
@@ -220,10 +231,13 @@ impl RustSqlGuiApp {
                             badge_pill(ui, "SSL", theme.semantic_ok);
                         }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui
-                                .small_button("Edit")
-                                .on_hover_text("Edit server configuration")
-                                .clicked()
+                            if icon_only_button(
+                                ui,
+                                &theme,
+                                IconKind::Edit,
+                                "Edit server configuration",
+                            )
+                            .clicked()
                             {
                                 let _ = self.store.start_editing_server(Some(&srv.id));
                                 let editing = self.store.servers.editing_server.clone();
@@ -245,12 +259,15 @@ impl RustSqlGuiApp {
                             .color(theme.text_muted),
                     );
                     ui.add_space(10.0);
-                    if ui
-                        .add_sized(
-                            [ui.available_width(), 28.0],
-                            primary_button(&theme, "Connect"),
-                        )
-                        .clicked()
+                    if icon_primary_button_wide(
+                        ui,
+                        &theme,
+                        IconKind::Play,
+                        "Connect",
+                        ui.available_width(),
+                        28.0,
+                    )
+                    .clicked()
                     {
                         self.connect_to_server(&srv.id, None, None);
                     }

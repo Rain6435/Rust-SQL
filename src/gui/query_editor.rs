@@ -1,7 +1,10 @@
 //! Multi-tab SQL query bar, code editor, inline parameter binding inputs, and action toolbar.
 
 use crate::core::params::{extract_query_parameters, ParamKind};
-use crate::gui::theme::{badge_pill, primary_button, subtle_button};
+use crate::gui::icons::{
+    icon_only_button, icon_primary_button, icon_subtle_button, paint_icon_ui, IconKind,
+};
+use crate::gui::theme::badge_pill;
 use crate::gui::RustSqlGuiApp;
 use eframe::egui::{self, CornerRadius, FontId, Key, Margin, RichText, Stroke};
 
@@ -89,11 +92,7 @@ impl RustSqlGuiApp {
                 }
             }
 
-            if ui
-                .add(subtle_button(&theme, "+"))
-                .on_hover_text("New Query Tab (Ctrl+T)")
-                .clicked()
-            {
+            if icon_only_button(ui, &theme, IconKind::Plus, "New Query Tab (Ctrl+T)").clicked() {
                 if let Some(db) = self.store.current_database() {
                     self.store.new_query(&db);
                 }
@@ -256,6 +255,16 @@ impl RustSqlGuiApp {
                     {
                         self.editor_font_size = (self.editor_font_size + 1.0).min(24.0);
                     }
+                    paint_icon_ui(
+                        ui,
+                        IconKind::Lock,
+                        12.0,
+                        if self.store.read_only_mode {
+                            theme.semantic_warn
+                        } else {
+                            theme.text_muted
+                        },
+                    );
                     ui.checkbox(&mut self.store.read_only_mode, "Read-Only")
                         .on_hover_text("Block INSERT/UPDATE/DELETE/DDL statements");
                     if self.store.read_only_mode {
@@ -263,21 +272,20 @@ impl RustSqlGuiApp {
                     }
                     ui.separator();
                     if matches!(client_key.as_str(), "mysql" | "sqlserver")
-                        && ui.add(subtle_button(&theme, "Notes")).clicked()
+                        && icon_subtle_button(ui, &theme, IconKind::Warning, "Notes").clicked()
                     {
                         self.show_client_info_modal = true;
                     }
-                    if ui
-                        .add(subtle_button(&theme, "Format"))
+                    if icon_subtle_button(ui, &theme, IconKind::Format, "Format")
                         .on_hover_text("Format SQL (Ctrl+I)")
                         .clicked()
                     {
                         self.format_current_query();
                     }
-                    if ui.add(subtle_button(&theme, "Bookmarks")).clicked() {
+                    if icon_subtle_button(ui, &theme, IconKind::Bookmark, "Bookmarks").clicked() {
                         self.show_bookmarks_modal = true;
                     }
-                    if ui.add(subtle_button(&theme, "ERD")).clicked() {
+                    if icon_subtle_button(ui, &theme, IconKind::Diagram, "ERD").clicked() {
                         if let Some(db) = self.store.current_database() {
                             let rt = self.rt.clone();
                             if let Ok(erd) = rt.block_on(self.store.generate_database_erd(&db)) {
@@ -285,22 +293,19 @@ impl RustSqlGuiApp {
                             }
                         }
                     }
-                    if ui
-                        .add(subtle_button(&theme, "Import"))
+                    if icon_subtle_button(ui, &theme, IconKind::Import, "Import")
                         .on_hover_text("Import CSV or JSON rows into a table")
                         .clicked()
                     {
                         self.import_modal = Some(Default::default());
                     }
-                    if ui
-                        .add(subtle_button(&theme, "Open"))
+                    if icon_subtle_button(ui, &theme, IconKind::FolderOpen, "Open")
                         .on_hover_text("Open .sql file (Ctrl+O)")
                         .clicked()
                     {
                         self.show_open_query_modal = true;
                     }
-                    if ui
-                        .add(subtle_button(&theme, "Save"))
+                    if icon_subtle_button(ui, &theme, IconKind::Save, "Save")
                         .on_hover_text("Save .sql file (Ctrl+S)")
                         .clicked()
                     {
@@ -310,24 +315,25 @@ impl RustSqlGuiApp {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if query_tab.is_executing && allow_cancel {
                             if ui
-                                .add_enabled(
-                                    !query_tab.is_canceling,
-                                    subtle_button(&theme, "Cancel"),
-                                )
+                                .add_enabled_ui(!query_tab.is_canceling, |ui| {
+                                    icon_subtle_button(ui, &theme, IconKind::Stop, "Cancel")
+                                })
+                                .inner
                                 .clicked()
                             {
                                 let rt = self.rt.clone();
                                 let _ = rt.block_on(self.store.cancel_query(qid));
                             }
-                        } else if ui.add(subtle_button(&theme, "Clear")).clicked() {
+                        } else if icon_subtle_button(ui, &theme, IconKind::Trash, "Clear").clicked()
+                        {
                             self.store.update_query_if_needed("", Some(""), None);
                         }
 
                         if ui
-                            .add_enabled(
-                                !query_tab.is_executing,
-                                primary_button(&theme, "▶ Execute"),
-                            )
+                            .add_enabled_ui(!query_tab.is_executing, |ui| {
+                                icon_primary_button(ui, &theme, IconKind::Play, "Execute")
+                            })
+                            .inner
                             .on_hover_text("Execute query or selection (Ctrl+Enter / Ctrl+R)")
                             .clicked()
                         {

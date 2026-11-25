@@ -1,5 +1,6 @@
 //! Query browser layout and database tree sidebar rendering.
 
+use crate::gui::icons::{icon_only_button, paint_icon_ui, IconKind};
 use crate::gui::theme::{badge_pill, subtle_button};
 use crate::gui::RustSqlGuiApp;
 use eframe::egui::{self, CornerRadius, Margin, RichText, Stroke};
@@ -75,10 +76,13 @@ impl RustSqlGuiApp {
                 );
                 ui.label(RichText::new(&srv_name).strong().color(theme.text_primary));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .small_button("Refresh")
-                        .on_hover_text("Refresh database & object metadata")
-                        .clicked()
+                    if icon_only_button(
+                        ui,
+                        &theme,
+                        IconKind::Refresh,
+                        "Refresh database & object metadata",
+                    )
+                    .clicked()
                     {
                         let rt = self.rt.clone();
                         let _ = rt.block_on(self.store.fetch_databases_if_needed());
@@ -96,6 +100,7 @@ impl RustSqlGuiApp {
         }
 
         ui.horizontal(|ui| {
+            paint_icon_ui(ui, IconKind::Search, 13.0, theme.text_muted);
             let filter_w = if self.db_search_filter.is_empty() {
                 ui.available_width()
             } else {
@@ -144,7 +149,22 @@ impl RustSqlGuiApp {
                 } else {
                     theme.text_primary
                 });
-                let resp = ui.selectable_label(is_current, text);
+                let resp = ui
+                    .horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        paint_icon_ui(
+                            ui,
+                            IconKind::Database,
+                            13.0,
+                            if is_current {
+                                theme.accent_secondary
+                            } else {
+                                theme.text_muted
+                            },
+                        );
+                        ui.selectable_label(is_current, text)
+                    })
+                    .inner;
                 if resp.clicked() {
                     if self.expanded_databases.contains(&db_name) {
                         self.expanded_databases.remove(&db_name);

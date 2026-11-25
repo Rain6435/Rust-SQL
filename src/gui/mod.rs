@@ -2,6 +2,7 @@
 
 pub mod completion;
 pub mod header_footer;
+pub mod icons;
 pub mod logo;
 pub mod modal_host_keys;
 pub mod modal_import;

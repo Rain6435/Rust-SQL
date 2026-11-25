@@ -135,94 +135,140 @@ impl RustSqlGuiApp {
         let (mut open, mut load, mut pick, mut run) = (true, false, None, false);
         egui::Window::new(format!("Import into {db}"))
             .open(&mut open)
-            .default_width(720.0)
+            .default_width(740.0)
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("File (.csv, .tsv, .json, .jsonl):");
-                    ui.text_edit_singleline(&mut st.path);
-                    load = ui
-                        .add(crate::gui::theme::subtle_button(&theme, "Load"))
-                        .clicked();
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Target table:");
-                    let current = st.table.as_ref().map(|t| t.name.clone()).unwrap_or_default();
-                    egui::ComboBox::from_id_salt("import_table").selected_text(current).show_ui(
-                        ui,
-                        |ui| {
-                            for t in &tables {
-                                if ui.selectable_label(false, &t.name).clicked() {
-                                    pick = Some(t.clone());
-                                }
-                            }
-                        },
-                    );
-                });
+                crate::gui::theme::modal_section(
+                    ui,
+                    &theme,
+                    crate::gui::icons::IconKind::FolderOpen,
+                    "Source & Target",
+                    |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("File (.csv, .tsv, .json, .jsonl):");
+                            ui.add(
+                                egui::TextEdit::singleline(&mut st.path)
+                                    .hint_text("/path/to/data.csv")
+                                    .desired_width(340.0),
+                            );
+                            load = crate::gui::icons::icon_subtle_button(
+                                ui,
+                                &theme,
+                                crate::gui::icons::IconKind::FolderOpen,
+                                "Load",
+                            )
+                            .clicked();
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Target table:");
+                            let current =
+                                st.table.as_ref().map(|t| t.name.clone()).unwrap_or_default();
+                            egui::ComboBox::from_id_salt("import_table")
+                                .selected_text(current)
+                                .show_ui(ui, |ui| {
+                                    for t in &tables {
+                                        if ui.selectable_label(false, &t.name).clicked() {
+                                            pick = Some(t.clone());
+                                        }
+                                    }
+                                });
+                        });
+                    },
+                );
+
                 if let Some(data) = st.data.clone() {
-                    ui.label(
-                        RichText::new(format!(
-                            "{} rows. Preview of the first {}; pick a target column for each source column:",
-                            data.rows.len(),
-                            data.preview(PREVIEW_ROWS).len()
-                        ))
-                        .small()
-                        .color(theme.text_muted),
-                    );
-                    let mut table = TableBuilder::new(ui).striped(true).max_scroll_height(240.0);
-                    for _ in &data.columns {
-                        table = table.column(Column::initial(120.0).at_least(60.0).clip(true));
-                    }
-                    table
-                        .header(44.0, |mut h| {
-                            for (i, name) in data.columns.iter().enumerate() {
-                                h.col(|ui| {
-                                    ui.vertical(|ui| {
-                                        ui.strong(name);
-                                        let sel = st.mapping[i].clone().unwrap_or("(skip)".into());
-                                        egui::ComboBox::from_id_salt(("import_map", i))
-                                            .selected_text(sel)
-                                            .show_ui(ui, |ui| {
-                                                ui.selectable_value(&mut st.mapping[i], None, "(skip)");
-                                                for t in &st.target_columns {
-                                                    ui.selectable_value(&mut st.mapping[i], Some(t.clone()), t);
-                                                }
+                    ui.add_space(6.0);
+                    crate::gui::theme::modal_section(
+                        ui,
+                        &theme,
+                        crate::gui::icons::IconKind::Table,
+                        "Column Mapping & Preview",
+                        |ui| {
+                            ui.label(
+                                RichText::new(format!(
+                                    "{} rows. Preview of the first {}; pick a target column for each source column:",
+                                    data.rows.len(),
+                                    data.preview(PREVIEW_ROWS).len()
+                                ))
+                                .small()
+                                .color(theme.text_muted),
+                            );
+                            let mut table =
+                                TableBuilder::new(ui).striped(true).max_scroll_height(240.0);
+                            for _ in &data.columns {
+                                table =
+                                    table.column(Column::initial(120.0).at_least(60.0).clip(true));
+                            }
+                            table
+                                .header(44.0, |mut h| {
+                                    for (i, name) in data.columns.iter().enumerate() {
+                                        h.col(|ui| {
+                                            ui.vertical(|ui| {
+                                                ui.strong(name);
+                                                let sel =
+                                                    st.mapping[i].clone().unwrap_or("(skip)".into());
+                                                egui::ComboBox::from_id_salt(("import_map", i))
+                                                    .selected_text(sel)
+                                                    .show_ui(ui, |ui| {
+                                                        ui.selectable_value(
+                                                            &mut st.mapping[i],
+                                                            None,
+                                                            "(skip)",
+                                                        );
+                                                        for t in &st.target_columns {
+                                                            ui.selectable_value(
+                                                                &mut st.mapping[i],
+                                                                Some(t.clone()),
+                                                                t,
+                                                            );
+                                                        }
+                                                    });
                                             });
+                                        });
+                                    }
+                                })
+                                .body(|body| {
+                                    let rows = data.preview(PREVIEW_ROWS);
+                                    body.rows(20.0, rows.len(), |mut row| {
+                                        for v in &rows[row.index()] {
+                                            row.col(|ui| {
+                                                ui.label(cell_text(v));
+                                            });
+                                        }
                                     });
                                 });
+                            if data.requires_confirmation() {
+                                ui.checkbox(
+                                    &mut st.confirmed,
+                                    format!("I confirm importing all {} rows", data.rows.len()),
+                                );
                             }
-                        })
-                        .body(|body| {
-                            let rows = data.preview(PREVIEW_ROWS);
-                            body.rows(20.0, rows.len(), |mut row| {
-                                for v in &rows[row.index()] {
-                                    row.col(|ui| {
-                                        ui.label(cell_text(v));
-                                    });
+                            let ready = st.table.is_some()
+                                && !st.mappings().is_empty()
+                                && (!data.requires_confirmation() || st.confirmed)
+                                && !read_only;
+                            ui.add_space(6.0);
+                            ui.horizontal(|ui| {
+                                run = ui
+                                    .add_enabled_ui(ready, |ui| {
+                                        crate::gui::icons::icon_primary_button(
+                                            ui,
+                                            &theme,
+                                            crate::gui::icons::IconKind::Import,
+                                            "Import",
+                                        )
+                                    })
+                                    .inner
+                                    .clicked();
+                                if read_only {
+                                    ui.label(
+                                        RichText::new("Import is disabled in Read-Only mode.")
+                                            .small()
+                                            .color(theme.semantic_warn),
+                                    );
                                 }
                             });
-                        });
-                    if data.requires_confirmation() {
-                        ui.checkbox(
-                            &mut st.confirmed,
-                            format!("I confirm importing all {} rows", data.rows.len()),
-                        );
-                    }
-                    let ready = st.table.is_some()
-                        && !st.mappings().is_empty()
-                        && (!data.requires_confirmation() || st.confirmed)
-                        && !read_only;
-                    ui.horizontal(|ui| {
-                        run = ui
-                            .add_enabled(ready, crate::gui::theme::primary_button(&theme, "Import"))
-                            .clicked();
-                        if read_only {
-                            ui.label(
-                                RichText::new("Import is disabled in Read-Only mode.")
-                                    .small()
-                                    .color(theme.semantic_warn),
-                            );
-                        }
-                    });
+                        },
+                    );
                 }
                 match &st.message {
                     Some(Ok(m)) => ui.label(RichText::new(m).color(theme.semantic_ok)),

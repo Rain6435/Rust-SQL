@@ -6,6 +6,7 @@ use crate::core::export::write_clipboard_text;
 use crate::core::result_ops::{
     compute_column_stats, filter_result_rows, sort_result_rows, SortDirection,
 };
+use crate::gui::icons::{icon_subtle_button, paint_icon_ui, IconKind};
 use crate::gui::theme::{badge_pill, card_frame, subtle_button, AppTheme};
 use crate::gui::RustSqlGuiApp;
 use crate::state::QueryTab;
@@ -92,10 +93,19 @@ impl RustSqlGuiApp {
                         );
                         ui.add_space(8.0);
                         ui.horizontal(|ui| {
-                            if ui.add(subtle_button(&theme, "Open Bookmarks")).clicked() {
+                            if icon_subtle_button(ui, &theme, IconKind::Bookmark, "Open Bookmarks")
+                                .clicked()
+                            {
                                 self.show_bookmarks_modal = true;
                             }
-                            if ui.add(subtle_button(&theme, "Open .sql File")).clicked() {
+                            if icon_subtle_button(
+                                ui,
+                                &theme,
+                                IconKind::FolderOpen,
+                                "Open .sql File",
+                            )
+                            .clicked()
+                            {
                                 self.show_open_query_modal = true;
                             }
                         });
@@ -237,6 +247,7 @@ impl RustSqlGuiApp {
                             );
                             if row_count > 0 {
                                 ui.separator();
+                                paint_icon_ui(ui, IconKind::Search, 12.0, theme.text_muted);
                                 ui.add(
                                     egui::TextEdit::singleline(&mut self.result_filter_text)
                                         .hint_text("Filter rows...")
@@ -247,13 +258,27 @@ impl RustSqlGuiApp {
                                 {
                                     self.result_filter_text.clear();
                                 }
-                                if ui.small_button("Stats").clicked() {
+                                if ui
+                                    .horizontal(|ui| {
+                                        ui.spacing_mut().item_spacing.x = 3.0;
+                                        paint_icon_ui(
+                                            ui,
+                                            IconKind::Chart,
+                                            12.0,
+                                            theme.accent_secondary,
+                                        );
+                                        ui.small_button("Stats")
+                                    })
+                                    .inner
+                                    .clicked()
+                                {
                                     let col_names: Vec<String> =
                                         res.fields.iter().map(|f| f.name.clone()).collect();
                                     self.stats_modal_data =
                                         Some(compute_column_stats(&res.rows, &col_names));
                                 }
                                 ui.separator();
+                                paint_icon_ui(ui, IconKind::Download, 12.0, theme.text_muted);
                                 ui.label(RichText::new("Save:").small().color(theme.text_muted));
                                 for fmt in ["CSV", "JSON", "MARKDOWN", "SQL", "JSONL"] {
                                     if ui.small_button(fmt).clicked() {
@@ -262,6 +287,7 @@ impl RustSqlGuiApp {
                                     }
                                 }
                                 ui.separator();
+                                paint_icon_ui(ui, IconKind::Copy, 12.0, theme.text_muted);
                                 ui.label(RichText::new("Copy:").small().color(theme.text_muted));
                                 for fmt in ["CSV", "JSON", "MARKDOWN", "SQL", "JSONL"] {
                                     if ui.small_button(fmt).clicked() {

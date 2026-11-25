@@ -1,5 +1,6 @@
 //! Sidebar tree rendering for tables, columns, triggers, indexes, views, functions, and procedures.
 
+use crate::gui::icons::{paint_icon_ui, IconKind};
 use crate::gui::RustSqlGuiApp;
 use crate::state::{DbObjectType, ScriptActionType};
 use eframe::egui::{self, RichText};
@@ -13,6 +14,7 @@ impl RustSqlGuiApp {
         filter_val: &str,
         disabled_features: &[String],
     ) {
+        let theme = self.current_theme();
         let tables = self
             .store
             .tables
@@ -52,6 +54,7 @@ impl RustSqlGuiApp {
                             );
                         }
                     }
+                    paint_icon_ui(ui, IconKind::Table, 12.0, theme.accent_secondary);
                     let item_resp = ui.link(&tbl.name);
                     if item_resp.clicked() {
                         let rt = self.rt.clone();
@@ -127,6 +130,7 @@ impl RustSqlGuiApp {
             ui.collapsing(format!("Columns ({})", cols.len()), |ui| {
                 for c in cols {
                     ui.horizontal(|ui| {
+                        paint_icon_ui(ui, IconKind::Column, 11.0, theme.text_muted);
                         ui.label(RichText::new(&c.name).color(theme.text_primary));
                         ui.label(
                             RichText::new(c.data_type.to_uppercase())
@@ -147,7 +151,10 @@ impl RustSqlGuiApp {
                 .unwrap_or_default();
             ui.collapsing(format!("Triggers ({})", triggers.len()), |ui| {
                 for tr in triggers {
-                    ui.label(RichText::new(&tr.name).color(theme.text_primary));
+                    ui.horizontal(|ui| {
+                        paint_icon_ui(ui, IconKind::Index, 11.0, theme.semantic_warn);
+                        ui.label(RichText::new(&tr.name).color(theme.text_primary));
+                    });
                 }
             });
             let indexes = self
@@ -160,7 +167,10 @@ impl RustSqlGuiApp {
                 .unwrap_or_default();
             ui.collapsing(format!("Indexes ({})", indexes.len()), |ui| {
                 for idx in indexes {
-                    ui.label(RichText::new(&idx.name).color(theme.text_primary));
+                    ui.horizontal(|ui| {
+                        paint_icon_ui(ui, IconKind::Index, 11.0, theme.accent_primary);
+                        ui.label(RichText::new(&idx.name).color(theme.text_primary));
+                    });
                 }
             });
         });
@@ -174,6 +184,7 @@ impl RustSqlGuiApp {
         filter_val: &str,
         disabled_features: &[String],
     ) {
+        let theme = self.current_theme();
         let views = self
             .store
             .views
@@ -186,7 +197,12 @@ impl RustSqlGuiApp {
                 if !filter_val.is_empty() && !vw.name.to_lowercase().contains(filter_val) {
                     continue;
                 }
-                let resp = ui.link(&vw.name);
+                let resp = ui
+                    .horizontal(|ui| {
+                        paint_icon_ui(ui, IconKind::View, 12.0, theme.semantic_ok);
+                        ui.link(&vw.name)
+                    })
+                    .inner;
                 if resp.clicked() {
                     let rt = self.rt.clone();
                     let _ = rt.block_on(self.store.execute_default_select_query_if_needed(
@@ -231,18 +247,21 @@ impl RustSqlGuiApp {
             .unwrap_or_default();
         ui.collapsing(format!("Functions ({})", funcs.len()), |ui| {
             for fn_item in funcs {
-                ui.label(&fn_item.name).context_menu(|ui| {
-                    if ui.button("Create Statement").clicked() {
-                        let rt = self.rt.clone();
-                        let _ = rt.block_on(self.store.get_sql_script_if_needed(
-                            db_name,
-                            &fn_item.name,
-                            ScriptActionType::Create,
-                            DbObjectType::Function,
-                            fn_item.schema.as_deref(),
-                        ));
-                        ui.close();
-                    }
+                ui.horizontal(|ui| {
+                    paint_icon_ui(ui, IconKind::Function, 12.0, theme.accent_primary);
+                    ui.label(&fn_item.name).context_menu(|ui| {
+                        if ui.button("Create Statement").clicked() {
+                            let rt = self.rt.clone();
+                            let _ = rt.block_on(self.store.get_sql_script_if_needed(
+                                db_name,
+                                &fn_item.name,
+                                ScriptActionType::Create,
+                                DbObjectType::Function,
+                                fn_item.schema.as_deref(),
+                            ));
+                            ui.close();
+                        }
+                    });
                 });
             }
         });
@@ -256,18 +275,21 @@ impl RustSqlGuiApp {
             .unwrap_or_default();
         ui.collapsing(format!("Procedures ({})", procs.len()), |ui| {
             for pr_item in procs {
-                ui.label(&pr_item.name).context_menu(|ui| {
-                    if ui.button("Create Statement").clicked() {
-                        let rt = self.rt.clone();
-                        let _ = rt.block_on(self.store.get_sql_script_if_needed(
-                            db_name,
-                            &pr_item.name,
-                            ScriptActionType::Create,
-                            DbObjectType::Procedure,
-                            pr_item.schema.as_deref(),
-                        ));
-                        ui.close();
-                    }
+                ui.horizontal(|ui| {
+                    paint_icon_ui(ui, IconKind::Function, 12.0, theme.accent_secondary);
+                    ui.label(&pr_item.name).context_menu(|ui| {
+                        if ui.button("Create Statement").clicked() {
+                            let rt = self.rt.clone();
+                            let _ = rt.block_on(self.store.get_sql_script_if_needed(
+                                db_name,
+                                &pr_item.name,
+                                ScriptActionType::Create,
+                                DbObjectType::Procedure,
+                                pr_item.schema.as_deref(),
+                            ));
+                            ui.close();
+                        }
+                    });
                 });
             }
         });
