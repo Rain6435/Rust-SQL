@@ -63,8 +63,44 @@ impl RustSqlGuiApp {
                                     );
                                 });
                                 ui.horizontal(|ui| {
-                                    ui.label("Custom Font:");
-                                    ui.text_edit_singleline(&mut self.settings_draft.custom_font);
+                                    ui.label("Font:");
+                                    const FONT_PRESETS: &[&str] = &[
+                                        "Lato",
+                                        "Inter",
+                                        "IBM Plex Sans",
+                                        "Source Sans 3",
+                                        "Roboto",
+                                        "JetBrains Mono",
+                                        "Fira Code",
+                                        "IBM Plex Mono",
+                                        "Source Code Pro",
+                                        "System Default",
+                                    ];
+                                    let current =
+                                        if self.settings_draft.custom_font.trim().is_empty() {
+                                            "Lato".to_string()
+                                        } else {
+                                            self.settings_draft.custom_font.trim().to_string()
+                                        };
+                                    egui::ComboBox::from_id_salt("settings_font_combo")
+                                        .selected_text(&current)
+                                        .width(200.0)
+                                        .show_ui(ui, |ui| {
+                                            for &font in FONT_PRESETS {
+                                                ui.selectable_value(
+                                                    &mut self.settings_draft.custom_font,
+                                                    font.to_string(),
+                                                    font,
+                                                );
+                                            }
+                                            if !FONT_PRESETS.contains(&current.as_str()) {
+                                                ui.selectable_value(
+                                                    &mut self.settings_draft.custom_font,
+                                                    current.clone(),
+                                                    &current,
+                                                );
+                                            }
+                                        });
                                 });
                             },
                         );
