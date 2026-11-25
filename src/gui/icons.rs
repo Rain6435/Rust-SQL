@@ -473,3 +473,141 @@ pub fn paint_icon(painter: &egui::Painter, rect: Rect, kind: IconKind, color: Co
         }
     }
 }
+
+/// Allocates a square slot of `size` points and paints the database engine logo for `client_key`.
+pub fn engine_logo_ui(ui: &mut egui::Ui, client_key: &str, size: f32, theme: &AppTheme) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::splat(size), egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        paint_engine_logo(ui.painter(), rect, client_key, theme);
+    }
+}
+
+/// Paints a recognizable vector logo for each supported SQL engine inside `rect`.
+pub fn paint_engine_logo(painter: &egui::Painter, rect: Rect, client_key: &str, theme: &AppTheme) {
+    let r = rect.shrink(1.0);
+    let w = r.width();
+    let h = r.height();
+    let pt = |nx: f32, ny: f32| Pos2::new(r.left() + nx * w, r.top() + ny * h);
+    let color = theme.dialect_color(client_key);
+    let s = Stroke::new(1.4, color);
+
+    match client_key.to_ascii_lowercase().as_str() {
+        "postgresql" | "postgres" => {
+            // Elephant head + ear + curved trunk
+            let head = vec![
+                pt(0.24, 0.44),
+                pt(0.24, 0.24),
+                pt(0.46, 0.14),
+                pt(0.74, 0.20),
+                pt(0.84, 0.42),
+                pt(0.76, 0.62),
+                pt(0.60, 0.64),
+                pt(0.60, 0.84),
+                pt(0.72, 0.88),
+            ];
+            painter.add(egui::Shape::line(head, s));
+            // Ear
+            painter.add(egui::Shape::line(
+                vec![
+                    pt(0.32, 0.28),
+                    pt(0.14, 0.42),
+                    pt(0.24, 0.64),
+                    pt(0.42, 0.56),
+                ],
+                s,
+            ));
+            // Eye
+            painter.circle_filled(pt(0.56, 0.36), 1.3, color);
+        }
+        "mysql" => {
+            // Leaping dolphin arc + dorsal fin + tail
+            let body = vec![
+                pt(0.14, 0.72),
+                pt(0.30, 0.36),
+                pt(0.56, 0.20),
+                pt(0.82, 0.34),
+                pt(0.90, 0.52),
+            ];
+            painter.add(egui::Shape::line(body, s));
+            // Dorsal fin
+            painter.add(egui::Shape::line(
+                vec![pt(0.46, 0.24), pt(0.52, 0.10), pt(0.60, 0.22)],
+                s,
+            ));
+            // Belly & tail fluke
+            painter.add(egui::Shape::line(
+                vec![pt(0.24, 0.74), pt(0.48, 0.48), pt(0.74, 0.50)],
+                Stroke::new(1.2, theme.accent_primary),
+            ));
+        }
+        "mariadb" => {
+            // Stylized seal silhouette + wave
+            let seal = vec![
+                pt(0.18, 0.72),
+                pt(0.26, 0.44),
+                pt(0.42, 0.20),
+                pt(0.58, 0.18),
+                pt(0.62, 0.32),
+                pt(0.54, 0.52),
+                pt(0.76, 0.68),
+            ];
+            painter.add(egui::Shape::line(seal, s));
+            painter.add(egui::Shape::line(
+                vec![
+                    pt(0.12, 0.82),
+                    pt(0.38, 0.74),
+                    pt(0.64, 0.82),
+                    pt(0.88, 0.74),
+                ],
+                Stroke::new(1.2, theme.accent_secondary),
+            ));
+        }
+        "redshift" => {
+            // Isometric 3D prism / cube
+            let hex = vec![
+                pt(0.50, 0.10),
+                pt(0.86, 0.30),
+                pt(0.86, 0.70),
+                pt(0.50, 0.90),
+                pt(0.14, 0.70),
+                pt(0.14, 0.30),
+                pt(0.50, 0.10),
+            ];
+            painter.add(egui::Shape::line(hex, s));
+            painter.line_segment([pt(0.50, 0.50), pt(0.50, 0.90)], s);
+            painter.line_segment([pt(0.50, 0.50), pt(0.14, 0.30)], s);
+            painter.line_segment([pt(0.50, 0.50), pt(0.86, 0.30)], s);
+        }
+        "sqlserver" => {
+            // Cylinder + crimson accent disc
+            let top = Rect::from_min_max(pt(0.16, 0.14), pt(0.84, 0.36));
+            painter.rect_filled(top, CornerRadius::same(3), color.gamma_multiply(0.30));
+            painter.rect_stroke(top, CornerRadius::same(3), s, egui::StrokeKind::Inside);
+            painter.line_segment([pt(0.16, 0.25), pt(0.16, 0.80)], s);
+            painter.line_segment([pt(0.84, 0.25), pt(0.84, 0.80)], s);
+            painter.line_segment([pt(0.16, 0.54), pt(0.84, 0.54)], s);
+            painter.line_segment([pt(0.16, 0.80), pt(0.84, 0.80)], s);
+        }
+        "sqlite" => {
+            // Page + diagonal feather quill
+            let frame = Rect::from_min_max(pt(0.16, 0.14), pt(0.76, 0.86));
+            painter.rect_stroke(frame, CornerRadius::same(2), s, egui::StrokeKind::Inside);
+            painter.line_segment([pt(0.32, 0.72), pt(0.86, 0.16)], Stroke::new(1.6, color));
+            painter.line_segment([pt(0.54, 0.34), pt(0.78, 0.34)], s);
+        }
+        "cassandra" => {
+            // Eye of Cassandra: almond eye + iris + pupil
+            painter.add(egui::Shape::line(
+                vec![pt(0.10, 0.50), pt(0.50, 0.22), pt(0.90, 0.50)],
+                s,
+            ));
+            painter.add(egui::Shape::line(
+                vec![pt(0.10, 0.50), pt(0.50, 0.78), pt(0.90, 0.50)],
+                s,
+            ));
+            painter.circle_stroke(pt(0.50, 0.50), w * 0.16, s);
+            painter.circle_filled(pt(0.50, 0.50), 1.6, color);
+        }
+        _ => paint_icon(painter, rect, IconKind::Database, color),
+    }
+}

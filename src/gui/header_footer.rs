@@ -283,6 +283,7 @@ impl RustSqlGuiApp {
                     let db_name = self.store.current_database().unwrap_or_default();
 
                     if !client_key.is_empty() {
+                        crate::gui::icons::engine_logo_ui(ui, &client_key, 15.0, &theme);
                         crate::gui::theme::badge_pill(
                             ui,
                             &client_key.to_uppercase(),

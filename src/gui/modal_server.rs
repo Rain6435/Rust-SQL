@@ -134,15 +134,24 @@ impl RustSqlGuiApp {
                 );
                 ui.label("Engine:");
                 let prev_client = self.server_draft.client.clone();
+                crate::gui::icons::engine_logo_ui(ui, &self.server_draft.client, 16.0, &theme);
+                let selected_name = CLIENTS
+                    .iter()
+                    .find(|c| c.key == self.server_draft.client)
+                    .map(|c| c.name.as_str())
+                    .unwrap_or(&self.server_draft.client);
                 egui::ComboBox::from_id_salt("server_client_combo")
-                    .selected_text(&self.server_draft.client)
+                    .selected_text(selected_name)
                     .show_ui(ui, |ui| {
                         for c in CLIENTS.iter() {
-                            ui.selectable_value(
-                                &mut self.server_draft.client,
-                                c.key.clone(),
-                                &c.name,
-                            );
+                            ui.horizontal(|ui| {
+                                crate::gui::icons::engine_logo_ui(ui, &c.key, 16.0, &theme);
+                                ui.selectable_value(
+                                    &mut self.server_draft.client,
+                                    c.key.clone(),
+                                    &c.name,
+                                );
+                            });
                         }
                     });
                 if self.server_draft.client != prev_client {

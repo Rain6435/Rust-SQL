@@ -190,6 +190,7 @@ impl RustSqlGuiApp {
         card_frame(&theme).show(ui, |ui| {
             if is_row {
                 ui.horizontal(|ui| {
+                    crate::gui::icons::engine_logo_ui(ui, &srv.client, 16.0, &theme);
                     badge_pill(ui, &srv.client.to_uppercase(), dialect_color);
                     ui.label(
                         RichText::new(&srv.name)
@@ -223,6 +224,7 @@ impl RustSqlGuiApp {
             } else {
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| {
+                        crate::gui::icons::engine_logo_ui(ui, &srv.client, 16.0, &theme);
                         badge_pill(ui, &srv.client.to_uppercase(), dialect_color);
                         if srv.ssh.is_some() {
                             badge_pill(ui, "SSH", theme.accent_secondary);

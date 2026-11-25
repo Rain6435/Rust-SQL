@@ -69,6 +69,7 @@ impl RustSqlGuiApp {
             .map(|s| (s.client.clone(), s.name.clone()))
         {
             ui.horizontal(|ui| {
+                crate::gui::icons::engine_logo_ui(ui, &srv_client, 15.0, &theme);
                 badge_pill(
                     ui,
                     &srv_client.to_uppercase(),
