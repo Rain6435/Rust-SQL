@@ -227,7 +227,7 @@ impl AppStore {
                 if let Some(q) = self.queries.queries_by_id.get_mut(&query_id) {
                     q.error = None;
                     q.is_executing = false;
-                    q.results = Some(results.clone());
+                    q.results = Some(std::sync::Arc::new(results.clone()));
                     q.execution_time = Some(elapsed_ms);
                     q.page = page;
                 }

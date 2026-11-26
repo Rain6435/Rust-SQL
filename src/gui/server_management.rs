@@ -1,7 +1,6 @@
 //! Server management dashboard rendering (`ActiveRoute::ServerManagement`).
 
 use crate::common::types::Server;
-use crate::common::utils::escape_regexp_string;
 use crate::gui::icons::{
     icon_only_button, icon_primary_button, icon_primary_button_wide, icon_subtle_button,
     paint_icon_ui, IconKind,
@@ -9,7 +8,6 @@ use crate::gui::icons::{
 use crate::gui::theme::{badge_pill, card_frame};
 use crate::gui::{RustSqlGuiApp, ServerFormDraft, SettingsFormDraft};
 use eframe::egui::{self, CornerRadius, Margin, RichText, Stroke};
-use regex::RegexBuilder;
 
 impl RustSqlGuiApp {
     /// Renders the server search bar, connection error banner, and server cards/list grid.
@@ -108,28 +106,14 @@ impl RustSqlGuiApp {
             ui.add_space(10.0);
         }
 
-        let pattern = escape_regexp_string(&self.server_filter);
-        let regex = RegexBuilder::new(&pattern)
-            .case_insensitive(true)
-            .build()
-            .ok();
-
+        // Escaped-pattern case-insensitive match is a plain substring test; lowercase the needle once.
+        let needle = self.server_filter.trim().to_lowercase();
         let filtered_servers: Vec<Server> = self
             .store
             .servers
             .items
             .iter()
-            .filter(|srv| {
-                if self.server_filter.trim().is_empty() {
-                    true
-                } else if let Some(ref re) = regex {
-                    re.is_match(&srv.name)
-                } else {
-                    srv.name
-                        .to_lowercase()
-                        .contains(&self.server_filter.to_lowercase())
-                }
-            })
+            .filter(|srv| needle.is_empty() || srv.name.to_lowercase().contains(&needle))
             .cloned()
             .collect();
 

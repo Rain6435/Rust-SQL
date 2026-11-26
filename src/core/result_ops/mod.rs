@@ -50,23 +50,32 @@ pub fn filter_result_rows(
     query: &str,
     column_filter: Option<&str>,
 ) -> Vec<Map<String, Value>> {
+    filter_result_refs(rows, query, column_filter)
+        .into_iter()
+        .cloned()
+        .collect()
+}
+
+/// Borrowing variant of [`filter_result_rows`]; avoids cloning every row (hot path for per-frame GUI rendering).
+pub fn filter_result_refs<'a>(
+    rows: &'a [Map<String, Value>],
+    query: &str,
+    column_filter: Option<&str>,
+) -> Vec<&'a Map<String, Value>> {
     let q = query.trim().to_lowercase();
     if q.is_empty() {
-        return rows.to_vec();
+        return rows.iter().collect();
     }
-
+    let column_filter = column_filter.filter(|c| !c.is_empty());
+    let matches = |v: &Value| match v {
+        Value::String(s) => s.to_lowercase().contains(&q),
+        other => value_to_string(other).to_lowercase().contains(&q),
+    };
     rows.iter()
-        .filter(|row| {
-            if let Some(col) = column_filter.filter(|c| !c.is_empty()) {
-                row.get(col)
-                    .map(|v| value_to_string(v).to_lowercase().contains(&q))
-                    .unwrap_or(false)
-            } else {
-                row.values()
-                    .any(|v| value_to_string(v).to_lowercase().contains(&q))
-            }
+        .filter(|row| match column_filter {
+            Some(col) => row.get(col).map(matches).unwrap_or(false),
+            None => row.values().any(matches),
         })
-        .cloned()
         .collect()
 }
 
@@ -76,8 +85,20 @@ pub fn sort_result_rows(
     column: &str,
     direction: SortDirection,
 ) -> Vec<Map<String, Value>> {
-    let mut sorted = rows.to_vec();
-    sorted.sort_by(|a, b| {
+    let refs: Vec<&Map<String, Value>> = rows.iter().collect();
+    sort_result_refs(refs, column, direction)
+        .into_iter()
+        .cloned()
+        .collect()
+}
+
+/// Borrowing variant of [`sort_result_rows`]; stable sort over row references without cloning rows.
+pub fn sort_result_refs<'a>(
+    mut rows: Vec<&'a Map<String, Value>>,
+    column: &str,
+    direction: SortDirection,
+) -> Vec<&'a Map<String, Value>> {
+    rows.sort_by(|a, b| {
         let va = a.get(column).unwrap_or(&Value::Null);
         let vb = b.get(column).unwrap_or(&Value::Null);
         match (va.is_null(), vb.is_null()) {
@@ -93,7 +114,7 @@ pub fn sort_result_rows(
             }
         }
     });
-    sorted
+    rows
 }
 
 fn compare_json_values(a: &Value, b: &Value) -> Ordering {

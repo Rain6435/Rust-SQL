@@ -205,9 +205,28 @@ impl eframe::App for RustSqlGuiApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let theme = self.current_theme();
-        theme.apply(&ctx);
-        if let Some(ref cfg) = self.store.config.data {
-            ctx.set_pixels_per_point((cfg.zoom_factor as f32).clamp(0.4, 3.0));
+        let zoom = self
+            .store
+            .config
+            .data
+            .as_ref()
+            .map(|cfg| (cfg.zoom_factor as f32).clamp(0.4, 3.0));
+        let is_dark = self
+            .store
+            .config
+            .data
+            .as_ref()
+            .map(|c| c.enabled_dark_theme)
+            .unwrap_or(true);
+        let key = (is_dark, zoom.map(f32::to_bits));
+        let cache_id = egui::Id::NULL.with("rust_sql_theme_zoom_applied");
+        let applied: Option<(bool, Option<u32>)> = ctx.data(|d| d.get_temp(cache_id));
+        if applied != Some(key) {
+            theme.apply(&ctx);
+            if let Some(z) = zoom {
+                ctx.set_pixels_per_point(z);
+            }
+            ctx.data_mut(|d| d.insert_temp(cache_id, key));
         }
 
         self.handle_global_shortcuts(&ctx);

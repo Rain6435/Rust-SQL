@@ -4,7 +4,7 @@ use crate::common::types::{ConnectionMode, EMULATED_BANNER};
 use crate::common::utils::value_to_string;
 use crate::core::export::write_clipboard_text;
 use crate::core::result_ops::{
-    compute_column_stats, filter_result_rows, sort_result_rows, SortDirection,
+    compute_column_stats, filter_result_refs, sort_result_refs, SortDirection,
 };
 use crate::gui::icons::{icon_subtle_button, paint_icon_ui, IconKind};
 use crate::gui::theme::{badge_pill, card_frame, subtle_button, AppTheme};
@@ -193,9 +193,9 @@ impl RustSqlGuiApp {
                 }
 
                 let mut display_rows =
-                    filter_result_rows(&res.rows, &self.result_filter_text, None);
+                    filter_result_refs(&res.rows, &self.result_filter_text, None);
                 if let Some((ref s_col, dir)) = self.result_sort_col {
-                    display_rows = sort_result_rows(&display_rows, s_col, dir);
+                    display_rows = sort_result_refs(display_rows, s_col, dir);
                 }
 
                 let row_count = res.row_count.unwrap_or(res.rows.len());
@@ -378,7 +378,7 @@ impl RustSqlGuiApp {
                             })
                             .body(|body| {
                                 body.rows(22.0, display_rows.len(), |mut row| {
-                                    let row_data = &display_rows[row.index()];
+                                    let row_data = display_rows[row.index()];
                                     for col_name in &cols {
                                         row.col(|ui| {
                                             let val =

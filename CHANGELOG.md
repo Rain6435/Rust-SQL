@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.4] - 2026-11-25
+
+### Changed
+- **Performance.** The GUI no longer re-applies the theme and zoom every frame, only when they change.
+  Result filtering/sorting works on row references instead of cloning every row each frame
+  (`filter_result_refs`, `sort_result_refs`). `QueryTab::results` is now an `Arc`, so per-frame tab
+  snapshots are cheap. Server search no longer rebuilds a regex per frame. Added a thin-LTO
+  `[profile.release]`.
+
 ## [2.1.3] - 2026-11-25
 
 ### Changed

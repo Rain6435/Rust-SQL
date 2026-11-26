@@ -29,7 +29,7 @@ pub struct QueryTab {
     /// Per-tab history of executed SQL statements.
     pub query_history: Vec<String>,
     /// Statement result sets from the most recent execution.
-    pub results: Option<Vec<QueryRowResult>>,
+    pub results: Option<std::sync::Arc<Vec<QueryRowResult>>>,
     /// Error message from the most recent execution, if it failed.
     pub error: Option<String>,
     /// Whether the most recent clipboard copy succeeded.

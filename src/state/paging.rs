@@ -94,7 +94,11 @@ impl AppStore {
         let fetched = finish_page(results.pop().ok_or("No rows returned")?, cursor);
         let added = fetched.result.rows.len();
         if let Some(q) = self.queries.queries_by_id.get_mut(&query_id) {
-            if let Some(first) = q.results.as_mut().and_then(|r| r.first_mut()) {
+            if let Some(first) = q
+                .results
+                .as_mut()
+                .and_then(|r| std::sync::Arc::make_mut(r).first_mut())
+            {
                 first.rows.extend(fetched.result.rows);
                 first.row_count = Some(first.rows.len());
             }
